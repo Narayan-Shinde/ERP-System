@@ -16,6 +16,7 @@ import java.util.List;
 public class SalesInvoice {
     @Id
     private String id;
+private String salesmanId;
     private String invoiceNumber;
     private String customerId;
     private String customerName;

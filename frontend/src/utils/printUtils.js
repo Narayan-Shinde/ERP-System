@@ -15,6 +15,7 @@ function amountInWords(amount) {
   const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
     'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
   const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+
   function toWords(num) {
     if (num === 0) return '';
     if (num < 20) return ones[num] + ' ';
@@ -24,12 +25,21 @@ function amountInWords(amount) {
     if (num < 10000000) return toWords(Math.floor(num/100000)) + 'Lakh ' + toWords(num%100000);
     return toWords(Math.floor(num/10000000)) + 'Crore ' + toWords(num%10000000);
   }
-  const amt = Math.round(Number(amount)||0);
-  const rupees = Math.floor(amt);
-  const paise  = Math.round((Number(amount)||0 - rupees) * 100);
+
+  const num = Number(amount) || 0;
+
+  // ✅ Correct split
+  const rupees = Math.floor(num);
+  const paise = Math.round((num - rupees) * 100);
+
   let words = 'INR ' + (toWords(rupees).trim() || 'Zero') + ' Rupees';
-  if (paise > 0) words += ' and ' + toWords(paise).trim() + ' Paise';
+
+  if (paise > 0) {
+    words += ' and ' + toWords(paise).trim() + ' Paise';
+  }
+
   words += ' Only';
+
   return words;
 }
 

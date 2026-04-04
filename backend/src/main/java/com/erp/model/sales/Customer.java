@@ -19,7 +19,7 @@ public class Customer {
     private String customerName;
     private String name;            // Legacy (kept for compat)
     private String contactPerson;
-
+    private String routeId;
     // ── Contact ──
     private String phone;
     private String email;
