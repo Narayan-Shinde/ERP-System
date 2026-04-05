@@ -1,12 +1,10 @@
 package com.erp.controller;
 
 import com.erp.model.AccountingVoucher;
-import com.erp.model.LedgerAccount;
-import com.erp.model.LedgerTransaction;
 import com.erp.repository.AccountingVoucherRepository;
-import com.erp.repository.LedgerAccountRepository;
-import com.erp.repository.LedgerTransactionRepository;
 import com.erp.service.AuditLogService;
+import com.erp.service.LedgerPostingService;
+import com.erp.service.VoucherSequenceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,8 +26,8 @@ public class AccountingController {
     @Autowired private AuditLogService auditLogService;
 
     @Autowired private AccountingVoucherRepository voucherRepo;
-    @Autowired private LedgerAccountRepository ledgerRepo;
-    @Autowired private LedgerTransactionRepository txnRepo;
+    @Autowired private LedgerPostingService ledgerPostingService;
+    @Autowired private VoucherSequenceService voucherSequenceService;
 
     @GetMapping("/vouchers")
     public List<AccountingVoucher> getVouchers(
@@ -86,43 +84,10 @@ public class AccountingController {
                 case "CONTRA"   -> "CTR";
                 default         -> "JRN";
             };
-            voucher.setVoucherNumber(prefix + "-" + String.format("%04d", voucherRepo.count() + 1));
+            voucher.setVoucherNumber(voucherSequenceService.nextManualVoucherNumber(prefix));
         }
         AccountingVoucher saved = voucherRepo.save(voucher);
-
-        LocalDate txnDate = voucher.getVoucherDate() != null ? voucher.getVoucherDate() : LocalDate.now();
-        for (AccountingVoucher.VoucherEntry entry : voucher.getEntries()) {
-            final String entryLedgerName = entry.getLedgerName();
-            if (entryLedgerName == null) continue;
-            ledgerRepo.findByActiveTrue().stream()
-                .filter(l -> entryLedgerName.equalsIgnoreCase(l.getAccountName()))
-                .findFirst()
-                .ifPresent(ledger -> {
-                    boolean alreadyPosted = txnRepo.existsByVoucherNumberAndLedgerAccountId(
-                        saved.getVoucherNumber(), ledger.getId());
-                    if (alreadyPosted) return; // skip duplicate
-
-                    LedgerTransaction lt = new LedgerTransaction();
-                    lt.setLedgerAccountId(ledger.getId());
-                    lt.setLedgerAccountName(ledger.getAccountName());
-                    lt.setTransactionDate(txnDate);
-                    lt.setVoucherType(saved.getVoucherType() != null ? saved.getVoucherType() : "JOURNAL");
-                    lt.setVoucherNumber(saved.getVoucherNumber());
-                    lt.setEntryType(entry.getEntryType());
-                    lt.setAmount(entry.getAmount());
-                    lt.setNarration(saved.getNarration());
-                    lt.setFinancialYear(saved.getFinancialYear());
-                    txnRepo.save(lt);
-
-                    boolean debitNature = "ASSET".equals(ledger.getAccountGroup()) || "EXPENSE".equals(ledger.getAccountGroup());
-                    double bal = ledger.getCurrentBalance();
-                    if ("DEBIT".equals(entry.getEntryType())) bal = debitNature ? bal + entry.getAmount() : bal - entry.getAmount();
-                    else                                        bal = debitNature ? bal - entry.getAmount() : bal + entry.getAmount();
-                    ledger.setCurrentBalance(Math.abs(bal));
-                    ledger.setCurrentBalanceType(bal >= 0 ? (debitNature?"DEBIT":"CREDIT") : (debitNature?"CREDIT":"DEBIT"));
-                    ledgerRepo.save(ledger);
-                });
-        }
+        ledgerPostingService.postVoucherToLedger(saved);
         auditLogService.logCreate("Accounting", "Voucher created: " + saved.getVoucherNumber() + " | " + saved.getVoucherType() + " | ₹" + saved.getTotalDebit());
         return ResponseEntity.ok(saved);
     }
@@ -151,12 +116,15 @@ public class AccountingController {
                 return ResponseEntity.badRequest().body(Map.of(
                     "error", "Debit must equal Credit", "debit", dr, "credit", cr));
 
+            ledgerPostingService.removePostingsForVoucherAndRecalculate(existing.getVoucherNumber());
+
             voucher.setId(id);
             voucher.setVoucherNumber(existing.getVoucherNumber()); // preserve number
             voucher.setTotalDebit(dr);
             voucher.setTotalCredit(cr);
             voucher.setCancelled(false);
             AccountingVoucher sv = voucherRepo.save(voucher);
+            ledgerPostingService.postVoucherToLedger(sv);
             auditLogService.logUpdate("Accounting", "Voucher updated: " + sv.getVoucherNumber() + " | " + sv.getVoucherType());
             return ResponseEntity.ok(sv);
         }).orElse(ResponseEntity.notFound().build());
@@ -201,6 +169,7 @@ public class AccountingController {
             reversal.setTotalDebit(v.getTotalCredit());   // swapped
             reversal.setTotalCredit(v.getTotalDebit());   // swapped
             voucherRepo.save(reversal);
+            ledgerPostingService.postVoucherToLedger(reversal);
 
             return ResponseEntity.ok(Map.of(
                 "message", "Voucher cancelled. Reversal entry " + reversal.getVoucherNumber() + " created.",

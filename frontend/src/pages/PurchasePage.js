@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getBanks, getSuppliers, addSupplier, updateSupplier, deleteSupplier,
-         getPurchaseInvoices, addPurchaseInvoice, cancelPurchaseInvoice, recordPurchasePayment,
+         getPurchaseInvoices, addPurchaseInvoice, updatePurchaseInvoice, cancelPurchaseInvoice, recordPurchasePayment,
          getPurchaseOrders, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
          getPurchaseReturns, addPurchaseReturn, updatePurchaseReturn,
          getGRNs, addGRN, getPurchaseRegister, getItems,
-         getPurchaseDebitNote, getSupplierStatement } from '../services/api';
+         getPurchaseDebitNote, getSupplierStatement, getGstConfigurations } from '../services/api';
+import { mergeHsnMaster, gstRateForHsn } from '../utils/hsnMaster';
 import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 import { useFY } from '../context/FYContext';
@@ -12,16 +13,10 @@ import { printPurchaseInvoice, printPurchaseReturn, printPurchaseOrder } from '.
 import { useAuth } from '../context/AuthContext';
 export default function PurchasePage() {
 const openDebitNote = (data) => {
-  console.log("Open Debit Note", data);
-
-  // optional: modal open karaycha asel tar
   setDebitNoteData(data);
 };
 
-const printDebitNote = (data) => {
-  console.log("Print Debit Note", data);
-
-  // basic print (temporary)
+const printDebitNote = () => {
   window.print();
 };
 const [ewayPModal, setEwayPModal] = useState(false);
@@ -33,7 +28,7 @@ const [supplierStmt, setSupplierStmt] = useState([]);
 const [stmtSupplier, setStmtSupplier] = useState(null);
 const fmt  = n => '₹' + (Number(n)||0).toLocaleString('en-IN',{maximumFractionDigits:2});
 const today = () => new Date().toISOString().split('T')[0];
-const GST_RATES = [0,5,12,18,28];
+const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const { selectedFY } = useFY();
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.roles?.includes('ROLE_ADMIN');
@@ -51,13 +46,14 @@ const GST_RATES = [0,5,12,18,28];
   const [grns, setGRNs]       = useState([]);
   const [register, setReg]    = useState(null);
   const [items, setItems]     = useState([]);
+  const [gstConfigs, setGstConfigs] = useState([]);
   const [modal, setModal]     = useState(null);
   const [form, setForm]       = useState({});
   const [poItems, setPoItems] = useState([{itemId:'',itemName:'',quantity:1,unit:'Nos',rate:0,amount:0}]);
   const [prItems, setPrItems] = useState([{itemId:'',itemName:'',quantity:1,unit:'Nos',rate:0,amount:0}]);
   const [editOrderId, setEditOrderId] = useState(null);
   const [editReturnId, setEditReturnId] = useState(null);
-  const [invItems, setInvItems] = useState([{itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
+  const [invItems, setInvItems] = useState([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
   const [payModal, setPayModal] = useState(null);
   const [payAmt, setPayAmt]   = useState('');
   const [payRef,  setPayRef]  = useState('');
@@ -73,14 +69,22 @@ const GST_RATES = [0,5,12,18,28];
   };
   const fetchAll = async () => {
     try {
-      const [sR,iR,oR,rR,gR,itR] = await Promise.all([
+      const [sR,iR,oR,rR,gR,itR,gstR] = await Promise.all([
         getSuppliers(), getPurchaseInvoices(), getPurchaseOrders(),
-        getPurchaseReturns(), getGRNs(), getItems()
+        getPurchaseReturns(), getGRNs(), getItems(), getGstConfigurations()
       ]);
       setSupp(sR.data||[]); setInv(iR.data||[]); setOrders(oR.data||[]);
       setReturns(rR.data||[]); setGRNs(gR.data||[]); setItems(itR.data||[]);
+      setGstConfigs(gstR.data||[]);
     } catch { }
   };
+
+  const hsnMaster = useMemo(() => mergeHsnMaster(gstConfigs, items), [gstConfigs, items]);
+  const gstRateOptions = useMemo(() => {
+    const s = new Set(GST_RATES);
+    hsnMaster.forEach((h) => s.add(h.gstRate));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [hsnMaster]);
 
   const calcTotals = (rows, f) => {
     let sub=0,cgst=0,sgst=0,igst=0;
@@ -120,25 +124,62 @@ const GST_RATES = [0,5,12,18,28];
     };
   };
 
-  const addItemRow = () => setInvItems([...invItems,{itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
-  const removeItemRow = i => setInvItems(invItems.filter((_,idx)=>idx!==i));
-  const updateItemRow = (i,field,val) => {
-    const rows=[...invItems]; rows[i]={...rows[i],[field]:val};
-    if(field==='itemId'){
-      const it=items.find(x=>x.id===val);
-      if(it){
-        rows[i].itemName=it.itemName;
-        rows[i].hsnCode=it.hsnCode||'';
-        rows[i].rate=it.purchaseRate||0;
-        rows[i].unit=it.unit||'Nos';
-        rows[i].gstRate=it.gstRate||18;
+  const addItemRow = () => setInvItems((prev) => [...prev, { itemId: '', itemName: '', hsnCode: '', quantity: 1, unit: 'Nos', rate: 0, gstRate: 18 }]);
+  const removeItemRow = (i) => setInvItems((prev) => prev.filter((_, idx) => idx !== i));
+  const updateItemRow = (i, field, val) => {
+    setInvItems((rows) => {
+      const r = rows.map((row, idx) => (idx === i ? { ...row, [field]: val } : row));
+      if (field === 'itemId') {
+        if (!val) {
+          r[i] = { ...r[i], itemId: '', itemName: '', hsnCode: '', rate: 0, gstRate: 18 };
+        } else {
+          const it = items.find((x) => x.id === val);
+          if (it) {
+            const hsn = (it.hsnCode || '').toString().trim();
+            let g = Number(it.gstRate);
+            if (!Number.isFinite(g)) {
+              const fromM = gstRateForHsn(hsnMaster, hsn);
+              g = fromM != null ? fromM : 18;
+            }
+            r[i] = {
+              ...r[i],
+              itemId: val,
+              itemName: it.itemName,
+              hsnCode: hsn,
+              rate: it.purchaseRate || 0,
+              unit: it.unit || 'Nos',
+              gstRate: g,
+            };
+          }
+        }
       }
-    }
-    if(field==='itemName'){
-      const it=items.find(x=>x.itemName===val||x.itemCode===val);
-      if(it){rows[i].itemId=it.id;rows[i].hsnCode=it.hsnCode||'';rows[i].rate=it.purchaseRate||0;rows[i].unit=it.unit||'Nos';rows[i].gstRate=it.gstRate||18;}
-    }
-    setInvItems(rows);
+      if (field === 'itemName') {
+        const it = items.find((x) => x.itemName === val || x.itemCode === val);
+        if (it) {
+          const hsn = (it.hsnCode || '').toString().trim();
+          let g = Number(it.gstRate);
+          if (!Number.isFinite(g)) {
+            const fromM = gstRateForHsn(hsnMaster, hsn);
+            g = fromM != null ? fromM : 18;
+          }
+          r[i] = {
+            ...r[i],
+            itemId: it.id,
+            itemName: it.itemName,
+            hsnCode: hsn,
+            rate: it.purchaseRate || 0,
+            unit: it.unit || 'Nos',
+            gstRate: g,
+          };
+        }
+      }
+      if (field === 'hsnCode') {
+        const code = String(val || '').trim();
+        const fromM = gstRateForHsn(hsnMaster, code);
+        r[i] = { ...r[i], hsnCode: code, ...(fromM != null ? { gstRate: fromM } : {}) };
+      }
+      return r;
+    });
   };
 
   const deleteSupp = async () => {
@@ -195,7 +236,7 @@ const GST_RATES = [0,5,12,18,28];
       financialYear:selectedFY.label,paymentStatus:'PENDING',status:'CONFIRMED',
       balanceDue:totals.grandTotal,paidAmount:0,invoiceDate:form.invoiceDate||today()};
     try { await addPurchaseInvoice(data); toast.success('Invoice saved! Auto-posting done ✅');
-      setModal(null); setForm({}); setInvItems([{itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]); fetchAll(); }
+      setModal(null); setForm({}); setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]); fetchAll(); }
     catch(e) { toast.error(e.response?.data?.error || e.response?.data || 'Failed to save'); }
   };
 
@@ -208,7 +249,7 @@ const GST_RATES = [0,5,12,18,28];
       balanceDue:totals.grandTotal,paidAmount:0,invoiceDate:form.invoiceDate||today()};
     try { await addPurchaseInvoice(data);
       toast.success('📋 Draft saved! Stock added nahi — confirm karayla invoice open kara.');
-      setModal(null); setForm({}); setInvItems([{itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]); fetchAll(); }
+      setModal(null); setForm({}); setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]); fetchAll(); }
     catch(e) { toast.error('Draft save failed'); }
   };
 
@@ -218,9 +259,7 @@ const GST_RATES = [0,5,12,18,28];
     try {
       // Use PUT /purchase/invoices/{id} to update ewayBillNumber
       const inv = {...ewayPModal, ewayBillNumber: ewayPNum};
-      await import('../services/api').then(api => api.updatePurchaseInvoice
-        ? api.updatePurchaseInvoice(ewayPModal.id, inv)
-        : fetch(`/api/purchase/invoices/${ewayPModal.id}`, {method:'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('token')}`},body:JSON.stringify(inv)}));
+      await updatePurchaseInvoice(ewayPModal.id, inv);
       toast.success('✅ E-Way Bill number saved: '+ewayPNum);
       setEwayPModal(null); fetchAll();
     } catch(e){ toast.error('Save failed'); }
@@ -351,7 +390,7 @@ const GST_RATES = [0,5,12,18,28];
               <span style={{background:'#fee2e2',color:'#dc2626',padding:'4px 10px',borderRadius:12,fontSize:12,fontWeight:700}}>
                 Outstanding: {fmt(invoices.reduce((s,i)=>s+Math.max(0,(i.balanceDue||0)),0))}
               </span>
-              <button className="btn btn-primary" onClick={()=>{setForm({invoiceDate:today()});setInvItems([{itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);setModal('invoice');}}>+ New Invoice</button>
+              <button className="btn btn-primary" onClick={()=>{setForm({invoiceDate:today()});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);setModal('invoice');}}>+ New Invoice</button>
             </div>
           </div>
           <div className="card-body">
@@ -468,7 +507,7 @@ const GST_RATES = [0,5,12,18,28];
                                 totalAmount:(it.quantity||1)*(it.rate||0)*(1+(it.gstRate||18)/100)
                               }));
                               setForm({supplierId:o.supplierId, poReference:o.poNumber});
-                              setInvItems(poInvItems.length ? poInvItems : [{itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
+                              setInvItems(poInvItems.length ? poInvItems : [{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
                               setTab('invoices'); setModal('invoice');
                               toast.success('PO items loaded — review and save invoice');
                             }}>📄 Invoice</button>
@@ -798,9 +837,17 @@ const GST_RATES = [0,5,12,18,28];
                 </div>
               </div>
               {/* Items */}
+              <datalist id="purchase-inv-hsn-datalist">
+                {hsnMaster.map((h) => (
+                  <option key={h.hsnCode} value={h.hsnCode}>{h.description} — {h.gstRate}%</option>
+                ))}
+              </datalist>
               <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden',marginBottom:12}}>
                 <div style={{background:'#1a4f8a',color:'white',padding:'8px 12px',fontSize:12,display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr 1fr .5fr',gap:8,fontWeight:700}}>
-                  <span>Item Name</span><span>HSN</span><span>Qty</span><span>Unit</span><span>Rate</span><span>GST%</span><span></span>
+                  <span>Item Name</span><span>HSN / SAC</span><span>Qty</span><span>Unit</span><span>Rate</span><span>GST%</span><span></span>
+                </div>
+                <div style={{fontSize:11,color:'#64748b',padding:'6px 10px',background:'#f1f5f9',borderBottom:'1px solid #e2e8f0'}}>
+                  आयटम निवडला की HSN व GST% ऑटो. यादी: <strong>{hsnMaster.length}</strong> (GST Config + Inventory + reference). इतर HSN GST मॉड्युलमध्ये जोडा.
                 </div>
                 {invItems.map((it,i)=>(
                   <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr 1fr .5fr',gap:8,padding:'6px 8px',borderBottom:'1px solid #f1f5f9',background:i%2?'#f8fafc':'white'}}>
@@ -811,14 +858,13 @@ const GST_RATES = [0,5,12,18,28];
                         <option key={x.id} value={x.id}>{x.itemName}{x.itemCode?' ('+x.itemCode+')':''} | Stock:{x.currentStock}</option>
                       ))}
                     </select>
-                    <input value={it.hsnCode||''} readOnly
-                      style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,background:'#f8fafc',color:'#64748b'}}
-                      placeholder="Auto"/>
+                    <input list="purchase-inv-hsn-datalist" value={it.hsnCode||''} onChange={e=>updateItemRow(i,'hsnCode',e.target.value)}
+                      style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}} placeholder="Type / pick"/>
                     <input type="number" min="0" value={it.quantity} onChange={e=>updateItemRow(i,'quantity',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input value={it.unit||'Nos'} onChange={e=>updateItemRow(i,'unit',e.target.value)} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input type="number" min="0" value={it.rate} onChange={e=>updateItemRow(i,'rate',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <select value={it.gstRate} onChange={e=>updateItemRow(i,'gstRate',Number(e.target.value))} style={{fontSize:12,padding:'4px 2px',border:'1px solid #e2e8f0',borderRadius:4}}>
-                      {GST_RATES.map(r=><option key={r} value={r}>{r}%</option>)}
+                      {gstRateOptions.map(r=><option key={r} value={r}>{r}%</option>)}
                     </select>
                     <button onClick={()=>removeItemRow(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16}}>×</button>
                   </div>

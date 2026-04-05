@@ -16,6 +16,7 @@ import com.erp.model.InventoryItem;
 import com.erp.model.StockMovement;
 import com.erp.repository.SupplierRepository;
 import com.erp.service.AutoPostingService;
+import com.erp.service.LedgerPostingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,6 +40,7 @@ public class PurchaseController {
     @Autowired private InventoryItemRepository itemRepo;
     @Autowired private StockMovementRepository stockMovRepo;
     @Autowired private AccountingVoucherRepository voucherRepo;
+    @Autowired private LedgerPostingService ledgerPostingService;
 
     @GetMapping("/suppliers")
     public List<Supplier> getSuppliers() { return supplierRepo.findByActiveTrue(); }
@@ -404,35 +406,40 @@ public class PurchaseController {
                 }
             }
 
-            try {
-                AccountingVoucher reversal = new AccountingVoucher();
-                reversal.setVoucherNumber("REV-" + inv.getInvoiceNumber());
-                reversal.setVoucherType("JOURNAL");
-                reversal.setVoucherDate(LocalDate.now());
-                reversal.setFinancialYear(inv.getFinancialYear() != null ? inv.getFinancialYear() : "2024-25");
-                reversal.setNarration("REVERSAL: Cancelled Purchase Invoice " + inv.getInvoiceNumber());
-                reversal.setReferenceNumber(inv.getInvoiceNumber());
-                reversal.setStatus("POSTED");
+            String invNo = inv.getInvoiceNumber();
+            if (invNo != null && !"DRAFT".equals(inv.getStatus())
+                    && voucherRepo.existsByVoucherNumber("AUTO-PUR-" + invNo)) {
+                try {
+                    AccountingVoucher reversal = new AccountingVoucher();
+                    reversal.setVoucherNumber("REV-PUR-" + invNo);
+                    reversal.setVoucherType("JOURNAL");
+                    reversal.setVoucherDate(LocalDate.now());
+                    reversal.setFinancialYear(inv.getFinancialYear() != null ? inv.getFinancialYear() : "2024-25");
+                    reversal.setNarration("REVERSAL: Cancelled Purchase Invoice " + invNo);
+                    reversal.setReferenceNumber(invNo);
+                    reversal.setStatus("POSTED");
 
-                List<AccountingVoucher.VoucherEntry> entries = new ArrayList<>();
-                AccountingVoucher.VoucherEntry cr1 = new AccountingVoucher.VoucherEntry();
-                cr1.setLedgerName("Purchase Account"); cr1.setEntryType("CREDIT"); cr1.setAmount(inv.getSubTotal());
-                entries.add(cr1);
-                if (inv.getTotalGst() > 0) {
-                    AccountingVoucher.VoucherEntry cr2 = new AccountingVoucher.VoucherEntry();
-                    cr2.setLedgerName("GST Input Tax Credit"); cr2.setEntryType("CREDIT"); cr2.setAmount(inv.getTotalGst());
-                    entries.add(cr2);
+                    List<AccountingVoucher.VoucherEntry> entries = new ArrayList<>();
+                    AccountingVoucher.VoucherEntry cr1 = new AccountingVoucher.VoucherEntry();
+                    cr1.setLedgerName("Purchase Account"); cr1.setEntryType("CREDIT"); cr1.setAmount(inv.getSubTotal());
+                    entries.add(cr1);
+                    if (inv.getTotalGst() > 0) {
+                        AccountingVoucher.VoucherEntry cr2 = new AccountingVoucher.VoucherEntry();
+                        cr2.setLedgerName("GST Input Tax Credit"); cr2.setEntryType("CREDIT"); cr2.setAmount(inv.getTotalGst());
+                        entries.add(cr2);
+                    }
+                    AccountingVoucher.VoucherEntry dr = new AccountingVoucher.VoucherEntry();
+                    dr.setLedgerName(inv.getSupplierName() != null ? inv.getSupplierName() : "Accounts Payable");
+                    dr.setEntryType("DEBIT"); dr.setAmount(inv.getGrandTotal());
+                    entries.add(dr);
+
+                    reversal.setEntries(entries);
+                    reversal.setTotalDebit(inv.getGrandTotal());
+                    reversal.setTotalCredit(inv.getSubTotal() + inv.getTotalGst());
+                    voucherRepo.save(reversal);
+                    ledgerPostingService.postVoucherToLedger(reversal);
+                } catch (Exception ignored) {
                 }
-                AccountingVoucher.VoucherEntry dr = new AccountingVoucher.VoucherEntry();
-                dr.setLedgerName(inv.getSupplierName() != null ? inv.getSupplierName() : "Accounts Payable");
-                dr.setEntryType("DEBIT"); dr.setAmount(inv.getGrandTotal());
-                entries.add(dr);
-
-                reversal.setEntries(entries);
-                reversal.setTotalDebit(inv.getGrandTotal());
-                reversal.setTotalCredit(inv.getSubTotal() + inv.getTotalGst());
-                voucherRepo.save(reversal);
-            } catch (Exception e) {
             }
 
             auditLogService.logDelete("Purchase", "Invoice cancelled: " + inv.getInvoiceNumber() + " | Reason: " + (reason != null ? reason : "N/A"));

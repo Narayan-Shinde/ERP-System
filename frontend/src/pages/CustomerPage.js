@@ -525,16 +525,16 @@ export default function CustomerPage() {
                             const updates = {};
                             if (d.name) { updates.customerName = d.name; updates.name = d.name; }
                             if (d.legalName) updates.legalName = d.legalName;
-                            const addrStr = d.fullAddr || [d.street,d.locality].filter(Boolean).join(', ');
+                            const addrStr = d.fullAddr || d.address || [d.street,d.locality].filter(Boolean).join(', ');
                             if (addrStr)    updates.address  = addrStr;
                             if (d.district||d.city) updates.city = d.district||d.city;
                             if (d.state)    updates.state    = d.state;
                             if (d.pincode)  updates.pincode  = d.pincode;
                             if (d.pan)      updates.pan      = d.pan;
                             setForm(f=>({...f, gstin:g, ...updates}));
-                            if (d.name) toast.success('✅ Auto-filled: '+d.name+(d.state?' | '+d.state:''));
+                            if (d.name) toast.success('✅ GSTIN verified — legal/trade name & address form मध्ये भरले. तुमच्या नोंदीशी जुळतंय का तपासा.');
                             else toast('ℹ️ GSTIN valid. State: '+(d.stateName||d.state)+' | PAN: '+d.pan,{icon:'✅'});
-                          } catch(e){ toast.dismiss(toastId); }
+                          } catch(e){ toast.dismiss(toastId); toast.error(e.message||'GSTIN verify failed — network/API'); }
                         }
                       }}
                       placeholder="15-char GSTIN — auto-fills name & address" maxLength={15} style={{flex:1}}/>
@@ -561,7 +561,7 @@ export default function CustomerPage() {
                           if (d.legalName)  updates.legalName = d.legalName;
                           if (d.tradeName)  updates.tradeName = d.tradeName;
                           // Address — use fullAddr or build from parts
-                          const addrStr = d.fullAddr || [d.street, d.locality].filter(Boolean).join(', ');
+                          const addrStr = d.fullAddr || d.address || [d.street, d.locality].filter(Boolean).join(', ');
                           if (addrStr)      updates.address   = addrStr;
                           if (d.district||d.city) updates.city = d.district || d.city;
                           if (d.state)      updates.state     = d.state;

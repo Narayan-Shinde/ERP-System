@@ -2,7 +2,6 @@ package com.erp.service;
 
 import com.erp.model.AccountingVoucher;
 import com.erp.model.LedgerAccount;
-import com.erp.model.LedgerTransaction;
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.SalesInvoice;
 import com.erp.model.BankAccount;
@@ -11,7 +10,6 @@ import com.erp.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.List;
 
@@ -20,9 +18,9 @@ public class AutoPostingService {
 
     @Autowired private AccountingVoucherRepository voucherRepo;
     @Autowired private LedgerAccountRepository ledgerRepo;
-    @Autowired private LedgerTransactionRepository ledgerTxnRepo;
     @Autowired private CompanySettingsRepository settingsRepo;
     @Autowired private BankAccountRepository bankRepo;
+    @Autowired private LedgerPostingService ledgerPostingService;
 
     private LedgerAccount getOrCreateLedger(String name, String group, String balanceType) {
         // Direct lookup by name (case-insensitive)
@@ -48,46 +46,6 @@ public class AutoPostingService {
                 la.setAccountCode(prefix + String.format("%03d", ledgerRepo.count() + 1));
                 return ledgerRepo.save(la);
             });
-    }
-
-    private void postLedgerEntry(LedgerAccount account, String entryType, double amount,
-                                  String voucherType, String voucherNumber,
-                                  String narration, String financialYear) {
-        double currentBal = account.getCurrentBalance();
-        String currentType = account.getCurrentBalanceType() != null ? account.getCurrentBalanceType() : "DEBIT";
-
-        double newBal;
-        String newType;
-        if (entryType.equals(currentType)) {
-            newBal  = currentBal + amount;
-            newType = currentType;
-        } else {
-            if (amount > currentBal) {
-                newBal  = amount - currentBal;
-                newType = entryType;
-            } else {
-                newBal  = currentBal - amount;
-                newType = currentType;
-            }
-        }
-        account.setCurrentBalance(newBal);
-        account.setCurrentBalanceType(newType);
-        ledgerRepo.save(account);
-
-        LedgerTransaction txn = new LedgerTransaction();
-        txn.setLedgerAccountId(account.getId());
-        txn.setLedgerAccountName(account.getAccountName());
-        txn.setTransactionDate(LocalDate.now());
-        txn.setVoucherType(voucherType);
-        txn.setVoucherNumber(voucherNumber);
-        txn.setEntryType(entryType);
-        txn.setAmount(amount);
-        txn.setRunningBalance(newBal);
-        txn.setBalanceType(newType);
-        txn.setNarration(narration);
-        txn.setFinancialYear(financialYear != null ? financialYear : "2024-25");
-        txn.setCreatedAt(LocalDateTime.now());
-        ledgerTxnRepo.save(txn);
     }
 
     public void postPurchaseInvoice(PurchaseInvoice inv) {
@@ -123,15 +81,15 @@ public class AutoPostingService {
             voucherRepo.save(v);
 
             LedgerAccount purchaseAc = getOrCreateLedger("Purchase Account", "EXPENSE", "DEBIT");
-            postLedgerEntry(purchaseAc, "DEBIT", inv.getSubTotal(), "PURCHASE", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(purchaseAc, "DEBIT", inv.getSubTotal(), "PURCHASE", vNum, narr, fy, date);
 
             if (inv.getTotalGst() > 0) {
                 LedgerAccount gstAc = getOrCreateLedger("GST Input Tax Credit", "ASSET", "DEBIT");
-                postLedgerEntry(gstAc, "DEBIT", inv.getTotalGst(), "PURCHASE", vNum, narr, fy);
+                ledgerPostingService.postLedgerEntry(gstAc, "DEBIT", inv.getTotalGst(), "PURCHASE", vNum, narr, fy, date);
             }
 
             LedgerAccount supplierAc = getOrCreateLedger(supplierName, "LIABILITY", "CREDIT");
-            postLedgerEntry(supplierAc, "CREDIT", inv.getGrandTotal(), "PURCHASE", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(supplierAc, "CREDIT", inv.getGrandTotal(), "PURCHASE", vNum, narr, fy, date);
 
         } catch (Exception e) { System.err.println("❌ AutoPosting ERROR: " + e.getMessage()); e.printStackTrace(); }
     }
@@ -169,14 +127,14 @@ public class AutoPostingService {
             voucherRepo.save(v);
 
             LedgerAccount customerAc = getOrCreateLedger(customerName, "ASSET", "DEBIT");
-            postLedgerEntry(customerAc, "DEBIT", inv.getGrandTotal(), "SALES", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(customerAc, "DEBIT", inv.getGrandTotal(), "SALES", vNum, narr, fy, date);
 
             LedgerAccount salesAc = getOrCreateLedger("Sales Account", "INCOME", "CREDIT");
-            postLedgerEntry(salesAc, "CREDIT", inv.getSubTotal(), "SALES", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(salesAc, "CREDIT", inv.getSubTotal(), "SALES", vNum, narr, fy, date);
 
             if (inv.getTotalGst() > 0) {
                 LedgerAccount gstOutAc = getOrCreateLedger("GST Output Tax Payable", "LIABILITY", "CREDIT");
-                postLedgerEntry(gstOutAc, "CREDIT", inv.getTotalGst(), "SALES", vNum, narr, fy);
+                ledgerPostingService.postLedgerEntry(gstOutAc, "CREDIT", inv.getTotalGst(), "SALES", vNum, narr, fy, date);
             }
 
         } catch (Exception e) { System.err.println("❌ AutoPosting ERROR: " + e.getMessage()); e.printStackTrace(); }
@@ -202,11 +160,12 @@ public class AutoPostingService {
             v.setEntries(entries); v.setTotalDebit(amount); v.setTotalCredit(amount);
             voucherRepo.save(v);
 
+            LocalDate payDate = LocalDate.now();
             LedgerAccount supplierAc = getOrCreateLedger(supplierName, "LIABILITY", "CREDIT");
-            postLedgerEntry(supplierAc, "DEBIT", amount, "PAYMENT", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(supplierAc, "DEBIT", amount, "PAYMENT", vNum, narr, fy, payDate);
 
             LedgerAccount bankAc = getOrCreateLedger(accountName, "ASSET", "DEBIT");
-            postLedgerEntry(bankAc, "CREDIT", amount, "PAYMENT", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(bankAc, "CREDIT", amount, "PAYMENT", vNum, narr, fy, payDate);
 
         } catch (Exception e) { System.err.println("❌ AutoPosting ERROR: " + e.getMessage()); e.printStackTrace(); }
     }
@@ -231,11 +190,12 @@ public class AutoPostingService {
             v.setEntries(entries); v.setTotalDebit(amount); v.setTotalCredit(amount);
             voucherRepo.save(v);
 
+            LocalDate recDate = LocalDate.now();
             LedgerAccount bankAc = getOrCreateLedger(accountName, "ASSET", "DEBIT");
-            postLedgerEntry(bankAc, "DEBIT", amount, "RECEIPT", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(bankAc, "DEBIT", amount, "RECEIPT", vNum, narr, fy, recDate);
 
             LedgerAccount customerAc = getOrCreateLedger(customerName, "ASSET", "DEBIT");
-            postLedgerEntry(customerAc, "CREDIT", amount, "RECEIPT", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(customerAc, "CREDIT", amount, "RECEIPT", vNum, narr, fy, recDate);
 
         } catch (Exception e) { System.err.println("❌ AutoPosting ERROR: " + e.getMessage()); e.printStackTrace(); }
     }
@@ -296,17 +256,17 @@ public class AutoPostingService {
             v.setTotalCredit(grandTotal);
             voucherRepo.save(v);
 
-            // Post to ledgers
+            LocalDate sretDate = v.getVoucherDate() != null ? v.getVoucherDate() : LocalDate.now();
             LedgerAccount retAc = getOrCreateLedger("Sales Returns Account", "EXPENSE", "DEBIT");
-            postLedgerEntry(retAc, "DEBIT", subTotal, "SALES_RETURN", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(retAc, "DEBIT", subTotal, "SALES_RETURN", vNum, narr, fy, sretDate);
 
             if (totalGst > 0) {
                 LedgerAccount gstAc = getOrCreateLedger("GST Output Tax Payable", "LIABILITY", "CREDIT");
-                postLedgerEntry(gstAc, "DEBIT", totalGst, "SALES_RETURN", vNum, narr, fy);
+                ledgerPostingService.postLedgerEntry(gstAc, "DEBIT", totalGst, "SALES_RETURN", vNum, narr, fy, sretDate);
             }
 
             LedgerAccount custAc = getOrCreateLedger(customerName, "ASSET", "DEBIT");
-            postLedgerEntry(custAc, "CREDIT", grandTotal, "SALES_RETURN", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(custAc, "CREDIT", grandTotal, "SALES_RETURN", vNum, narr, fy, sretDate);
 
         } catch (Exception e) { System.err.println("❌ AutoPosting ERROR: " + e.getMessage()); e.printStackTrace(); }
     }
@@ -351,16 +311,16 @@ public class AutoPostingService {
             v.setTotalCredit(subTotal + totalGst);
             voucherRepo.save(v);
 
-            // Post to ledgers
+            LocalDate pretDate = v.getVoucherDate() != null ? v.getVoucherDate() : LocalDate.now();
             LedgerAccount suppAc = getOrCreateLedger(supplierName, "LIABILITY", "CREDIT");
-            postLedgerEntry(suppAc, "DEBIT", grandTotal, "PURCHASE_RETURN", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(suppAc, "DEBIT", grandTotal, "PURCHASE_RETURN", vNum, narr, fy, pretDate);
 
             LedgerAccount retAc = getOrCreateLedger("Purchase Returns Account", "INCOME", "CREDIT");
-            postLedgerEntry(retAc, "CREDIT", subTotal, "PURCHASE_RETURN", vNum, narr, fy);
+            ledgerPostingService.postLedgerEntry(retAc, "CREDIT", subTotal, "PURCHASE_RETURN", vNum, narr, fy, pretDate);
 
             if (totalGst > 0) {
                 LedgerAccount gstAc = getOrCreateLedger("GST Input Tax Credit", "ASSET", "DEBIT");
-                postLedgerEntry(gstAc, "CREDIT", totalGst, "PURCHASE_RETURN", vNum, narr, fy);
+                ledgerPostingService.postLedgerEntry(gstAc, "CREDIT", totalGst, "PURCHASE_RETURN", vNum, narr, fy, pretDate);
             }
 
         } catch (Exception e) { System.err.println("❌ AutoPosting ERROR: " + e.getMessage()); e.printStackTrace(); }

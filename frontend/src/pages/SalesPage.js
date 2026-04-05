@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   getBanks, getCustomers, addCustomer, updateCustomer, deleteCustomer,
   getSalesInvoices, addSalesInvoice, updateSalesInvoice, cancelSalesInvoice, recordSalesPayment,
   getSalesOrders, addSalesOrder, updateSalesOrder, deleteSalesOrder,
   getSalesReturns, addSalesReturn, updateSalesReturn,
-  getItems, getSalesRegister, convertToInvoice
+  getItems, getSalesRegister, convertToInvoice, getGstConfigurations
 } from '../services/api';
+import { mergeHsnMaster, gstRateForHsn } from '../utils/hsnMaster';
 import { printSalesInvoiceMulti } from '../utils/printUtils';
 import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
@@ -29,6 +30,7 @@ export default function SalesPage() {
   const [orders,    setOrders]    = useState([]);
   const [returns,   setReturns]   = useState([]);
   const [items,     setItems]     = useState([]);
+  const [gstConfigs, setGstConfigs] = useState([]);
   const [banks,     setBanks]     = useState([]);
   const [register,  setReg]       = useState(null);
 
@@ -69,14 +71,22 @@ export default function SalesPage() {
 
   const fetchAll = async () => {
     try {
-      const [cR,iR,oR,rR,itR] = await Promise.all([
+      const [cR,iR,oR,rR,itR,gstR] = await Promise.all([
         getCustomers(), getSalesInvoices(), getSalesOrders(),
-        getSalesReturns(), getItems()
+        getSalesReturns(), getItems(), getGstConfigurations()
       ]);
       setCusts(cR.data||[]); setInv(iR.data||[]); setOrders(oR.data||[]);
       setReturns(rR.data||[]); setItems(itR.data||[]);
+      setGstConfigs(gstR.data||[]);
     } catch { toast.error('Data load failed — backend running aahe ka?'); }
   };
+
+  const hsnMaster = useMemo(() => mergeHsnMaster(gstConfigs, items), [gstConfigs, items]);
+  const gstRateOptions = useMemo(() => {
+    const s = new Set(GST_RATES);
+    hsnMaster.forEach((h) => s.add(h.gstRate));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [hsnMaster]);
 
   // ── GST calc (mirrors PurchasePage exactly) ──
   const calcTotals = (rows, f) => {
@@ -104,12 +114,37 @@ export default function SalesPage() {
 
   const addItemRow    = () => setInvItems(r=>[...r,{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);
   const removeItemRow = i  => setInvItems(r=>r.filter((_,idx)=>idx!==i));
-  const updateItemRow = (i,field,val) => {
-    setInvItems(rows => {
-      const r=rows.map((row,idx)=>idx===i?{...row,[field]:val}:row);
-      if(field==='itemId'){
-        const it=items.find(x=>x.id===val);
-        if(it) r[i]={...r[i],itemName:it.itemName,hsnCode:it.hsnCode||'',rate:it.salesRate||0,unit:it.unit||'Nos',gstRate:it.gstRate||18};
+  const updateItemRow = (i, field, val) => {
+    setInvItems((rows) => {
+      const r = rows.map((row, idx) => (idx === i ? { ...row, [field]: val } : row));
+      if (field === 'itemId') {
+        if (!val) {
+          r[i] = { ...r[i], itemId: '', itemName: '', hsnCode: '', rate: 0, gstRate: 18, discount: r[i].discount || 0 };
+        } else {
+          const it = items.find((x) => x.id === val);
+          if (it) {
+            const hsn = (it.hsnCode || '').toString().trim();
+            let g = Number(it.gstRate);
+            if (!Number.isFinite(g)) {
+              const fromM = gstRateForHsn(hsnMaster, hsn);
+              g = fromM != null ? fromM : 18;
+            }
+            r[i] = {
+              ...r[i],
+              itemId: val,
+              itemName: it.itemName,
+              hsnCode: hsn,
+              rate: it.salesRate || 0,
+              unit: it.unit || 'Nos',
+              gstRate: g,
+            };
+          }
+        }
+      }
+      if (field === 'hsnCode') {
+        const code = String(val || '').trim();
+        const fromM = gstRateForHsn(hsnMaster, code);
+        r[i] = { ...r[i], hsnCode: code, ...(fromM != null ? { gstRate: fromM } : {}) };
       }
       return r;
     });
@@ -611,9 +646,17 @@ export default function SalesPage() {
               </div>
 
               {/* Items */}
+              <datalist id="sales-inv-hsn-datalist">
+                {hsnMaster.map((h) => (
+                  <option key={h.hsnCode} value={h.hsnCode}>{h.description} — {h.gstRate}%</option>
+                ))}
+              </datalist>
               <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden',marginBottom:12}}>
                 <div style={{background:'#1a4f8a',color:'white',padding:'8px 12px',fontSize:12,display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr .6fr 1fr .5fr',gap:8,fontWeight:700}}>
-                  <span>Item Name</span><span>HSN</span><span>Qty</span><span>Unit</span><span>Rate</span><span>Disc%</span><span>GST%</span><span></span>
+                  <span>Item Name</span><span>HSN / SAC</span><span>Qty</span><span>Unit</span><span>Rate</span><span>Disc%</span><span>GST%</span><span></span>
+                </div>
+                <div style={{fontSize:11,color:'#64748b',padding:'6px 10px',background:'#f1f5f9',borderBottom:'1px solid #e2e8f0'}}>
+                  आयटम निवडला की HSN व GST% ऑटो. HSN टाइप / ड्रॉपडाउन — एकूण <strong>{hsnMaster.length}</strong> codes (GST Config + Inventory + reference). अधिकचे GST मॉड्युलमध्ये जोडा.
                 </div>
                 {invItems.map((it,i)=>(
                   <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr .6fr 1fr .5fr',gap:8,padding:'6px 8px',borderBottom:'1px solid #f1f5f9',background:i%2?'#f8fafc':'white'}}>
@@ -624,13 +667,14 @@ export default function SalesPage() {
                         <option key={x.id} value={x.id}>{x.itemName}{x.itemCode?' ('+x.itemCode+')':''} | Stock:{x.currentStock}</option>
                       ))}
                     </select>
-                    <input value={it.hsnCode||''} readOnly style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,background:'#f8fafc',color:'#64748b'}} placeholder="Auto"/>
+                    <input list="sales-inv-hsn-datalist" value={it.hsnCode||''} onChange={e=>updateItemRow(i,'hsnCode',e.target.value)}
+                      style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}} placeholder="Type / pick"/>
                     <input type="number" min="0.001" value={it.quantity} onChange={e=>updateItemRow(i,'quantity',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input value={it.unit||'Nos'} onChange={e=>updateItemRow(i,'unit',e.target.value)} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input type="number" min="0" value={it.rate} onChange={e=>updateItemRow(i,'rate',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input type="number" min="0" max="100" value={it.discount||0} onChange={e=>updateItemRow(i,'discount',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <select value={it.gstRate} onChange={e=>updateItemRow(i,'gstRate',Number(e.target.value))} style={{fontSize:12,padding:'4px 2px',border:'1px solid #e2e8f0',borderRadius:4}}>
-                      {GST_RATES.map(r=><option key={r} value={r}>{r}%</option>)}
+                      {gstRateOptions.map(r=><option key={r} value={r}>{r}%</option>)}
                     </select>
                     <button onClick={()=>removeItemRow(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16}}>×</button>
                   </div>

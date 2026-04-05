@@ -11,20 +11,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * JWT Utility — 50 year token sathi configured.
- *
- * application.properties madhe:
- *   app.jwt.expiration=1576800000000   (50 years in milliseconds)
- *   app.jwt.secret=<long secret>
- *
- * Server restart zala tari token valid rahto KARAN:
- *   - Token madhe expiry encoded aahe (50 years parat)
- *   - Secret key same rahte (properties madhun)
- *   - MongoDB restart zali tari JwtFilter token validate karto
- *     UserDetailsService kadun user DB madhun load karto
- *
- * IMPORTANT: Secret key kabhi change nako karu production madhe —
- *   change kela tar sagalya users la re-login karave laagel.
+ * HS256 JWT access tokens. Expiry is {@code app.jwt.expiration} (ms) from issuance.
+ * <p>
+ * Changing {@code app.jwt.secret} invalidates all existing tokens — users must sign in again.
+ * Production: set env {@code JWT_SECRET} (32+ random bytes recommended).
  */
 @Component
 public class JwtUtil {
@@ -47,10 +37,7 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /**
-     * Token generate karo username sathi.
-     * Expiry = current time + properties madhila expiration (50 years)
-     */
+    /** Issue a token for the given subject; expiry = now + {@code app.jwt.expiration}. */
     public String generateToken(String username) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("iat", new Date());
@@ -63,10 +50,7 @@ public class JwtUtil {
             .compact();
     }
 
-    /**
-     * Token madhun username kaadha.
-     * Server restart zala tari same secret ne verify hote.
-     */
+    /** Parse and return the subject (username). */
     public String extractUsername(String token) {
         return Jwts.parserBuilder()
             .setSigningKey(getSigningKey())
@@ -76,13 +60,7 @@ public class JwtUtil {
             .getSubject();
     }
 
-    /**
-     * Token valid ka check karo:
-     * 1. Username match hote ka
-     * 2. Expire zala nahi ka
-     *
-     * Server restart = new JwtUtil bean, SAME secret → validate works fine.
-     */
+    /** True if signature is valid, subject matches, and token is not expired. */
     public boolean validateToken(String token, String username) {
         try {
             String extractedUsername = extractUsername(token);
@@ -96,18 +74,13 @@ public class JwtUtil {
             boolean notExpired    = !expDate.before(new Date());
             return usernameMatch && notExpired;
         } catch (ExpiredJwtException e) {
-            // Token expire zala (50 years nantarcha scenario)
             return false;
         } catch (Exception e) {
-            // Invalid token ya signature mismatch
             return false;
         }
     }
 
-    /**
-     * Token kiti seconds madhe expire hoyel?
-     * Frontend la show karayche aasel tar use kara.
-     */
+    /** Seconds until expiry, or 0 if parsing fails. */
     public long getExpiryInSeconds(String token) {
         try {
             Date expDate = Jwts.parserBuilder()

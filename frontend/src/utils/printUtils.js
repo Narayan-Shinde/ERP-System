@@ -272,7 +272,31 @@ function itemsTable(items, showPrice) {
 }
 
 function totalsAndWords(inv) {
-  var html = (
+  var gt   = Number(inv.grandTotal) || 0;
+  var paid = Number(inv.paidAmount) || 0;
+  var bd   = inv.balanceDue;
+  if (bd == null || bd === '') bd = Math.max(0, Math.round((gt - paid) * 100) / 100);
+  else bd = Number(bd) || 0;
+
+  var st = inv.paymentStatus || '';
+  var hasPayFields = (inv.paidAmount != null && inv.paidAmount !== '') ||
+    (inv.balanceDue != null && inv.balanceDue !== '');
+  var showPay = hasPayFields || st === 'PARTIAL' || st === 'PAID' || st === 'RETURNED' || st === 'PENDING';
+
+  var payRows = '';
+  if (showPay && gt > 0.005) {
+    if (paid > 0.005) {
+      payRows += '<tr><td>Less: Paid / Adjusted</td><td>' + fmt(paid) + '</td></tr>';
+    }
+    payRows += '<tr style="font-weight:800;background:#fffbeb;color:#92400e"><td>Balance Due</td><td>' + fmt(bd) + '</td></tr>';
+  }
+
+  var words1 = '<div class="words-row"><b>Invoice total (in words):</b> ' + amountInWords(gt) + '</div>';
+  var words2 = (showPay && gt > 0.005 && bd > 0.005)
+    ? '<div class="words-row" style="margin-top:4px"><b>Balance due (in words):</b> ' + amountInWords(bd) + '</div>'
+    : '';
+
+  return (
     '<div class="tot-row">'+
       '<div class="tot-box">'+
         '<table><tbody>'+
@@ -284,16 +308,16 @@ function totalsAndWords(inv) {
           (inv.packagingCharge>0 ? '<tr><td>Packaging</td><td>'+fmt(inv.packagingCharge)+'</td></tr>' : '')+
           (inv.otherCharge>0 ? '<tr><td>'+(inv.otherChargeLabel||'Other Charges')+'</td><td>'+fmt(inv.otherCharge)+'</td></tr>' : '')+
           (inv.roundOff&&Math.abs(inv.roundOff)>0.001 ? '<tr><td>Round Off</td><td>'+n(inv.roundOff)+'</td></tr>' : '')+
-          '<tr class="grand"><td>Total</td><td>'+fmt(inv.grandTotal||0)+'</td></tr>'+
+          '<tr class="grand"><td>Invoice Total</td><td>'+fmt(gt)+'</td></tr>'+
+          payRows +
         '</tbody></table>'+
       '</div>'+
     '</div>'+
-    '<div class="words-row"><b>Total amount (in words):</b> '+amountInWords(inv.grandTotal||0)+'</div>'
+    words1 + words2
   );
-  return html;
 }
 
-function hsnTable(items, isInterState) {
+function hsnTable(items, isInterState, grandTotalForPayable) {
   if (!items || !items.length) return '';
   var map = {};
   items.forEach(function(it) {
@@ -335,7 +359,7 @@ function hsnTable(items, isInterState) {
       '<tfoot><tr>'+footRow+'</tr></tfoot>'+
     '</table>'+
     '<div style="text-align:right;font-size:12px;font-weight:700;margin-top:6px;padding-right:2px">'+
-      'Amount Payable: '+fmt(items.reduce(function(s,i){return s+(Number(i.totalAmount||i.amount||0));},0))+
+      'Invoice Value (incl. tax): '+fmt(grandTotalForPayable != null && grandTotalForPayable !== '' ? Number(grandTotalForPayable) : items.reduce(function(s,i){return s+(Number(i.totalAmount||i.amount||0));},0))+
     '</div>'+
     '</div>'
   );
@@ -480,7 +504,7 @@ function buildInvoiceCopy(inv, co, companyName, copyLabel, isChallan) {
   var body =
     hdr + party +
     itemsTable(inv.items, true) +
-    hsnTable(inv.items, inv.isInterState) +
+    hsnTable(inv.items, inv.isInterState, inv.grandTotal) +
     totalsAndWords(inv) +
     bankAndSign(co, companyName) +
     notesAndTC(inv.notes, co.termsConditions) +
@@ -616,7 +640,7 @@ export async function printPurchaseInvoice(inv, approvedReturns) {
     '</div>'
   );
 
-  var body = hdr + party + itemsTable(inv.items, true) + hsnTable(inv.items, inv.isInterState) +
+  var body = hdr + party + itemsTable(inv.items, true) + hsnTable(inv.items, inv.isInterState, inv.grandTotal) +
     totalsAndWords(inv) + bankAndSign(co, companyName) +
     notesAndTC(inv.notes, co.termsConditions) + footerLine(companyName);
 

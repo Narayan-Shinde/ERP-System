@@ -15,6 +15,7 @@ import com.erp.repository.InventoryItemRepository;
 import com.erp.repository.StockMovementRepository;
 import com.erp.model.StockMovement;
 import com.erp.service.AutoPostingService;
+import com.erp.service.LedgerPostingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,6 +40,7 @@ public class SalesController {
     @Autowired private InventoryItemRepository itemRepo;
     @Autowired private StockMovementRepository stockMovRepo;
     @Autowired private AccountingVoucherRepository voucherRepo;
+    @Autowired private LedgerPostingService ledgerPostingService;
 
     @GetMapping("/customers")
     public List<Customer> getCustomers() { return customerRepo.findByActiveTrue(); }
@@ -494,34 +496,39 @@ public class SalesController {
                 }
             }
 
-            try {
-                AccountingVoucher reversal = new AccountingVoucher();
-                reversal.setVoucherNumber("REV-" + inv.getInvoiceNumber());
-                reversal.setVoucherType("JOURNAL");
-                reversal.setVoucherDate(LocalDate.now());
-                reversal.setFinancialYear(inv.getFinancialYear() != null ? inv.getFinancialYear() : "2024-25");
-                reversal.setNarration("REVERSAL: Cancelled Sales Invoice " + inv.getInvoiceNumber());
-                reversal.setReferenceNumber(inv.getInvoiceNumber());
-                reversal.setStatus("POSTED");
+            String invNo = inv.getInvoiceNumber();
+            if (invNo != null && !"DRAFT".equals(inv.getStatus())
+                    && voucherRepo.existsByVoucherNumber("AUTO-SAL-" + invNo)) {
+                try {
+                    AccountingVoucher reversal = new AccountingVoucher();
+                    reversal.setVoucherNumber("REV-SAL-" + invNo);
+                    reversal.setVoucherType("JOURNAL");
+                    reversal.setVoucherDate(LocalDate.now());
+                    reversal.setFinancialYear(inv.getFinancialYear() != null ? inv.getFinancialYear() : "2024-25");
+                    reversal.setNarration("REVERSAL: Cancelled Sales Invoice " + invNo);
+                    reversal.setReferenceNumber(invNo);
+                    reversal.setStatus("POSTED");
 
-                List<AccountingVoucher.VoucherEntry> entries = new ArrayList<>();
-                AccountingVoucher.VoucherEntry cr = new AccountingVoucher.VoucherEntry();
-                cr.setLedgerName(inv.getCustomerName() != null ? inv.getCustomerName() : "Accounts Receivable");
-                cr.setEntryType("CREDIT"); cr.setAmount(inv.getGrandTotal());
-                entries.add(cr);
-                AccountingVoucher.VoucherEntry dr1 = new AccountingVoucher.VoucherEntry();
-                dr1.setLedgerName("Sales Account"); dr1.setEntryType("DEBIT"); dr1.setAmount(inv.getSubTotal());
-                entries.add(dr1);
-                if (inv.getTotalGst() > 0) {
-                    AccountingVoucher.VoucherEntry dr2 = new AccountingVoucher.VoucherEntry();
-                    dr2.setLedgerName("GST Output Tax Payable"); dr2.setEntryType("DEBIT"); dr2.setAmount(inv.getTotalGst());
-                    entries.add(dr2);
+                    List<AccountingVoucher.VoucherEntry> entries = new ArrayList<>();
+                    AccountingVoucher.VoucherEntry cr = new AccountingVoucher.VoucherEntry();
+                    cr.setLedgerName(inv.getCustomerName() != null ? inv.getCustomerName() : "Accounts Receivable");
+                    cr.setEntryType("CREDIT"); cr.setAmount(inv.getGrandTotal());
+                    entries.add(cr);
+                    AccountingVoucher.VoucherEntry dr1 = new AccountingVoucher.VoucherEntry();
+                    dr1.setLedgerName("Sales Account"); dr1.setEntryType("DEBIT"); dr1.setAmount(inv.getSubTotal());
+                    entries.add(dr1);
+                    if (inv.getTotalGst() > 0) {
+                        AccountingVoucher.VoucherEntry dr2 = new AccountingVoucher.VoucherEntry();
+                        dr2.setLedgerName("GST Output Tax Payable"); dr2.setEntryType("DEBIT"); dr2.setAmount(inv.getTotalGst());
+                        entries.add(dr2);
+                    }
+                    reversal.setEntries(entries);
+                    reversal.setTotalDebit(inv.getSubTotal() + inv.getTotalGst());
+                    reversal.setTotalCredit(inv.getGrandTotal());
+                    voucherRepo.save(reversal);
+                    ledgerPostingService.postVoucherToLedger(reversal);
+                } catch (Exception ignored) {
                 }
-                reversal.setEntries(entries);
-                reversal.setTotalDebit(inv.getSubTotal() + inv.getTotalGst());
-                reversal.setTotalCredit(inv.getGrandTotal());
-                voucherRepo.save(reversal);
-            } catch (Exception e) {
             }
 
             return ResponseEntity.ok(Map.of(

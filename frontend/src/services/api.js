@@ -7,9 +7,8 @@ API.interceptors.request.use(config => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
-// ── Response Interceptor — Server restart / 401 handle ──
-// IMPORTANT: Server restart hotana localStorage.clear() NAKO
-// Token still valid aahe localStorage madhe — fakt reload karo
+// 401: if JWT exp claim is still in the future, assume transient (e.g. server restart) and reload once.
+// If token missing or expired, clear storage and send user to login.
 let _isHandling401 = false;
 API.interceptors.response.use(
   res => res,
@@ -18,20 +17,16 @@ API.interceptors.response.use(
       _isHandling401 = true;
       const token = localStorage.getItem('token');
       if (token) {
-        // Token ahe — server restart cha problem asel, reload karo
-        // 50 year token ahe so typically expire nahi
         try {
           const payload = JSON.parse(atob(token.split('.')[1]));
           const expiry  = payload.exp ? payload.exp * 1000 : 0;
           if (expiry > Date.now()) {
-            // Token valid aahe — reload karo (server restart recover hote)
             window.dispatchEvent(new CustomEvent('api-unauthorized', { detail: { status: 401 } }));
             setTimeout(() => { _isHandling401 = false; }, 3000);
             return Promise.reject(err);
           }
         } catch {}
       }
-      // Token nahi ya expired — login la pathav
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -348,6 +343,7 @@ export const verifyGSTIN = async (gstin) => {
       street: '', locality: '', district: '', state: stateName,
       stateName, pincode: '', fullAddr: '',
       pan, stateCode, status: 'UNVERIFIED', cancelled: false,
+      note: 'Could not verify online — GSTIN format valid; state from GSTIN: ' + stateName,
       raw: { note: 'Could not fetch from API — GSTIN format valid, state: ' + stateName }
     }
   };

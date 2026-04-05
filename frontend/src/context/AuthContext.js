@@ -34,8 +34,7 @@ export const AuthProvider = ({ children }) => {
     if (storedUser && storedToken) {
       // Token expired aahe ka check karo
       if (isTokenExpired(storedToken)) {
-        // Token expired — clear karo, login page la jao
-        // (50 years expiry sathi practically he hoynar nahi)
+        // Token expired — clear and require login (expiry comes from backend app.jwt.expiration)
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
