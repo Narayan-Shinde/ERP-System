@@ -2,8 +2,6 @@ package com.erp.controller;
 
 import com.erp.model.StockMovement;
 import com.erp.model.Customer;
-import com.erp.model.SalesInvoice;
-import com.erp.repository.SalesInvoiceRepository;
 import com.erp.model.SalesOrder;
 import com.erp.model.SalesReturn;
 import com.erp.repository.*;

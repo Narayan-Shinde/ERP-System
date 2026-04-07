@@ -8,7 +8,8 @@ import {
   getItemBatches, addItemBatch,
   getItemPriceLists, updateItemPriceLists,
   updateItemImage, deleteItemImage,
-  getExpiringSoon, adjustItemStock
+  getExpiringSoon, adjustItemStock,
+  suggestHsn
 } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
@@ -20,51 +21,6 @@ const fmtN = n => (Number(n)||0).toLocaleString('en-IN');
 const UNITS = ['Nos','Pcs','Box','Kg','Gram','Litre','ML','Meter','Feet','Inch','Dozen','Pack','Set','Pair','Roll','Sheet','Bag','Bottle','Can','Carton','Strip','Tablet','Capsule','Tube','Sachet'];
 const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 6, 7.5, 12, 18, 28];
 const BARCODE_TYPES = ['CODE128','EAN13','QR','CODE39','UPC'];
-
-const HSN_DATA = [
-  // ── Adhesive Tape & Packaging (Client business) ──
-  {hsn:'3919',desc:'Self-adhesive plates/film/foil/tape (plastics)',gst:18},
-  {hsn:'39199090',desc:'Self-adhesive tape — BOPP/plastic tape',gst:18},
-  {hsn:'39199010',desc:'Self-adhesive tape — other types',gst:18},
-  {hsn:'3920',desc:'Plates, sheets, film, foil — plastics',gst:18},
-  {hsn:'3926',desc:'Other articles of plastics',gst:18},
-  {hsn:'4811',desc:'Paper/paperboard coated with adhesives',gst:12},
-  // ── Electronics ──
-  {hsn:'8471',desc:'Computers and data processing machines',gst:18},
-  {hsn:'8517',desc:'Telephone sets / smartphones',gst:18},
-  {hsn:'8518',desc:'Microphones, loudspeakers, headphones',gst:18},
-  {hsn:'8528',desc:'Monitors and projectors',gst:18},
-  // ── FMCG / Consumer ──
-  {hsn:'3304',desc:'Beauty / make-up preparations',gst:28},
-  {hsn:'3305',desc:'Hair care preparations',gst:28},
-  {hsn:'3401',desc:'Soap and detergents',gst:18},
-  {hsn:'2202',desc:'Beverages (non-alcoholic)',gst:18},
-  {hsn:'2106',desc:'Food preparations',gst:18},
-  // ── Pharma ──
-  {hsn:'3004',desc:'Medicaments / pharmaceuticals',gst:12},
-  {hsn:'3002',desc:'Vaccines, blood products',gst:5},
-  // ── Textiles ──
-  {hsn:'6201',desc:'Mens overcoats and cloaks',gst:12},
-  {hsn:'6101',desc:'Mens/boys overcoats (knitted)',gst:12},
-  {hsn:'6403',desc:'Footwear with leather soles',gst:18},
-  // ── Stationery/Office ──
-  {hsn:'4820',desc:'Registers, account books, notebooks',gst:12},
-  {hsn:'4901',desc:'Printed books, brochures',gst:0},
-  {hsn:'9608',desc:'Ball point pens, felt tip pens',gst:18},
-  // ── Furniture/Hardware ──
-  {hsn:'9403',desc:'Other furniture',gst:18},
-  {hsn:'7317',desc:'Nails, tacks, drawing pins',gst:18},
-  // ── Automotive ──
-  {hsn:'8703',desc:'Motor cars and vehicles',gst:28},
-  {hsn:'8708',desc:'Vehicle parts and accessories',gst:28},
-  // ── Agriculture ──
-  {hsn:'1001',desc:'Wheat and meslin',gst:0},
-  {hsn:'1006',desc:'Rice',gst:0},
-  // ── Jewellery ──
-  {hsn:'7113',desc:'Jewellery and parts',gst:3},
-  // ── Toys ──
-  {hsn:'9503',desc:'Toys and games',gst:12},
-];
 
 export default function InventoryPage() {
   const { user } = useAuth();
@@ -149,6 +105,35 @@ export default function InventoryPage() {
     load();
     loadExpiring();
   }, []);
+
+  // ─────────────── HSN AUTO-SUGGEST FROM BACKEND ───────────────
+  const hsnTimeoutRef = useRef(null);
+  const handleItemNameChange = (e) => {
+    const name = e.target.value;
+    setForm({...form, itemName: name});
+
+    // Clear previous timeout
+    if (hsnTimeoutRef.current) clearTimeout(hsnTimeoutRef.current);
+
+    // Debounce backend call
+    if (name.trim().length >= 3) {
+      hsnTimeoutRef.current = setTimeout(async () => {
+        try {
+          const response = await suggestHsn(name);
+          if (response.data && response.data.hsnCode) {
+            setForm(f => ({
+              ...f,
+              hsnCode: response.data.hsnCode,
+              gstRate: response.data.gstRate,
+              hsnDescription: response.data.description
+            }));
+          }
+        } catch (err) {
+          // Silent fail - user can manually enter
+        }
+      }, 500);
+    }
+  };
 
   // ─────────────── ITEMS CRUD ───────────────
   const saveItem = async () => {
@@ -811,22 +796,15 @@ export default function InventoryPage() {
                 </div>
                 <div className="form-group">
                   <label>Item Name <span style={{color:'#dc2626'}}>*</span></label>
-                  <input value={form.itemName||''} onChange={e=>setForm({...form,itemName:e.target.value})}
+                  <input value={form.itemName||''} onChange={handleItemNameChange}
                     placeholder="Enter item name"/>
                 </div>
                 <div className="form-group">
-                  <label>HSN Code <span style={{fontSize:10,color:'#94a3b8'}}>(GST auto-fill)</span></label>
-                  <input value={form.hsnCode||''} list="hsn-datalist"
-                    onChange={e=>{
-                      const val=e.target.value.trim();
-                      const h=HSN_DATA.find(x=>x.hsn===val);
-                      setForm(f=>({...f,hsnCode:val,gstRate:h?h.gst:(f.gstRate||18)}));
-                    }}
-                    placeholder="Type HSN code (e.g. 3919)..." style={{width:'100%'}}/>
-                  <datalist id="hsn-datalist">
-                    {HSN_DATA.map(h=><option key={h.hsn} value={h.hsn}>{h.hsn} — {h.desc} ({h.gst}%)</option>)}
-                  </datalist>
-                  {form.hsnCode && (()=>{const h=HSN_DATA.find(x=>x.hsn===form.hsnCode);return h?<div style={{fontSize:11,color:'#059669',marginTop:2}}>✓ {h.desc} | GST: {h.gst}%</div>:null;})()}
+                  <label>HSN Code <span style={{fontSize:10,color:'#94a3b8'}}>(Auto-filled from backend)</span></label>
+                  <input value={form.hsnCode||''}
+                    onChange={e=>setForm({...form,hsnCode:e.target.value})}
+                    placeholder="HSN code auto-filled from item name..." style={{width:'100%'}}/>
+                  {form.hsnDescription && <div style={{fontSize:11,color:'#059669',marginTop:2}}>✓ {form.hsnDescription} | GST: {form.gstRate}%</div>}
                 </div>
                 <div className="form-group">
                   <label>Category</label>

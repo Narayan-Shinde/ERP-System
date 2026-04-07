@@ -1,10 +1,10 @@
 package com.erp.controller;
-
 import com.erp.model.InventoryItem;
 import com.erp.model.StockMovement;
-import com.erp.repository.InventoryItemRepository;
-import com.erp.repository.StockMovementRepository;
-import com.erp.service.AuditLogService;
+import com.erp.repository.*;
+import com.erp.repository.HsnMasterRepository;
+import com.erp.model.gst.HsnMaster;
+import com.erp.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +23,7 @@ public class InventoryController {
     @Autowired private AuditLogService auditLogService;
     @Autowired private InventoryItemRepository itemRepo;
     @Autowired private StockMovementRepository stockMovRepo;
+    @Autowired private HsnMasterRepository hsnRepo;
 
     // ─────────────────── ITEMS ───────────────────
 
@@ -140,6 +141,83 @@ public class InventoryController {
             auditLogService.logDelete("Inventory", "Item deactivated: " + item.getItemName());
             return ResponseEntity.ok(Map.of("message", "Item deactivated successfully"));
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    // ─────────────────── HSN AUTO-SUGGEST ───────────────────
+
+    @GetMapping("/items/suggest-hsn")
+    public ResponseEntity<?> suggestHsnForItem(@RequestParam String itemName) {
+        if (itemName == null || itemName.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Item name is required"));
+        }
+
+        String searchTerm = itemName.trim();
+        List<HsnMaster> suggestions = hsnRepo.findByDescriptionLike(searchTerm);
+
+        // If no direct matches, try word by word
+        if (suggestions.isEmpty()) {
+            String[] words = searchTerm.toLowerCase().split("\\s+");
+            for (String word : words) {
+                if (word.length() >= 3) {
+                    List<HsnMaster> wordResults = hsnRepo.findByDescriptionLike(word);
+                    for (HsnMaster hsn : wordResults) {
+                        if (!suggestions.contains(hsn)) {
+                            suggestions.add(hsn);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Return top suggestion with confidence score
+        List<Map<String, Object>> scoredSuggestions = new ArrayList<>();
+        String searchLower = searchTerm.toLowerCase();
+
+        for (HsnMaster hsn : suggestions.stream().limit(5).toList()) {
+            Map<String, Object> scored = new LinkedHashMap<>();
+            scored.put("hsnCode", hsn.getHsnCode());
+            scored.put("description", hsn.getDescription());
+            scored.put("gstRate", hsn.getGstRate());
+
+            // Calculate confidence
+            String desc = hsn.getDescription() != null ? hsn.getDescription().toLowerCase() : "";
+            double confidence = 0.0;
+            if (desc.contains(searchLower)) {
+                confidence = 1.0;
+            } else {
+                String[] searchWords = searchLower.split("\\s+");
+                int matchCount = 0;
+                for (String word : searchWords) {
+                    if (word.length() >= 3 && desc.contains(word)) {
+                        matchCount++;
+                    }
+                }
+                confidence = searchWords.length > 0 ? (double) matchCount / searchWords.length : 0;
+            }
+
+            scored.put("confidence", Math.round(confidence * 100) / 100.0);
+            scoredSuggestions.add(scored);
+        }
+
+        // Sort by confidence
+        scoredSuggestions.sort((a, b) ->
+            ((Double) b.get("confidence")).compareTo((Double) a.get("confidence"))
+        );
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("itemName", searchTerm);
+        response.put("suggestionsCount", scoredSuggestions.size());
+
+        if (!scoredSuggestions.isEmpty()) {
+            Map<String, Object> best = scoredSuggestions.get(0);
+            response.put("hsnCode", best.get("hsnCode"));
+            response.put("gstRate", best.get("gstRate"));
+            response.put("description", best.get("description"));
+            response.put("confidence", best.get("confidence"));
+        }
+
+        response.put("allSuggestions", scoredSuggestions);
+        return ResponseEntity.ok(response);
     }
 
     // ─────────────────── LOW STOCK ───────────────────

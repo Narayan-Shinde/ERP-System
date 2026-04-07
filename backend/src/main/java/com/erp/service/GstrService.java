@@ -2,6 +2,7 @@ package com.erp.service;
 
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.SalesInvoice;
+import com.erp.model.InvoiceLineItem;
 import com.erp.repository.PurchaseInvoiceRepository;
 import com.erp.repository.SalesInvoiceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +50,7 @@ public class GstrService {
         Map<String, Map<String, Double>> rateWiseSales = new LinkedHashMap<>();
         for (SalesInvoice inv : salesList) {
             if (inv.getItems() == null) continue;
-            for (SalesInvoice.InvoiceItem item : inv.getItems()) {
+            for (InvoiceLineItem item : inv.getItems()) {
                 String rate = String.valueOf((int) item.getGstRate()) + "%";
                 rateWiseSales.computeIfAbsent(rate, k -> new LinkedHashMap<>());
                 rateWiseSales.get(rate).merge("taxableValue", item.getAmount(), Double::sum);

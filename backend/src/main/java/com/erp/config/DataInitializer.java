@@ -74,7 +74,7 @@ public class DataInitializer implements CommandLineRunner {
                         && inv.getInvoiceNumber().equals(m.getReferenceNumber()));
             if (alreadyHasMovement) continue;
 
-            for (com.erp.model.SalesInvoice.InvoiceItem item : inv.getItems()) {
+            for (com.erp.model.InvoiceLineItem item : inv.getItems()) {
                 if (item.getItemId() == null || item.getItemId().isEmpty()) continue;
                 itemRepo.findById(item.getItemId()).ifPresent(invItem -> {
                     double newStock = invItem.getCurrentStock() - item.getQuantity();

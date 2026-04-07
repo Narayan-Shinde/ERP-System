@@ -1,12 +1,11 @@
 package com.erp.controller;
-import com.erp.model.SalesInvoice;
 import com.erp.model.PurchaseInvoice;
-import com.erp.model.SalesReturn;
 import com.erp.model.PurchaseReturn;
+import com.erp.model.SalesInvoice;
+import com.erp.model.SalesReturn;
 import com.erp.model.GstConfiguration;
 
 import com.erp.repository.GstConfigurationRepository;
-import com.erp.repository.SalesInvoiceRepository;
 import com.erp.repository.PurchaseInvoiceRepository;
 import com.erp.repository.SalesReturnRepository;
 import com.erp.repository.PurchaseReturnRepository;

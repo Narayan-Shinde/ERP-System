@@ -1,8 +1,8 @@
 package com.erp.controller;
 
+import com.erp.model.Customer;
 import com.erp.model.SalesInvoice;
 import com.erp.model.SalesReturn;
-import com.erp.model.Customer;
 import com.erp.repository.CustomerRepository;
 import com.erp.repository.SalesInvoiceRepository;
 import com.erp.repository.SalesReturnRepository;

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   getRecurringInvoices, addRecurringInvoice, updateRecurringInvoice,
-  deleteRecurringInvoice, runRecurringNow, getCustomers, getItems
+  deleteRecurringInvoice, runRecurringNow, getCustomers, getItems,
+  calculateInvoice
 } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -16,6 +17,7 @@ export default function RecurringInvoicePage() {
   const [items,     setItems]     = useState([]);
   const [modal,     setModal]     = useState(false);
   const [editId,    setEditId]    = useState(null);
+  const [calculatedTotal, setCalculatedTotal] = useState(null);
   const [form,      setForm]      = useState({frequency:'MONTHLY',dayOfMonth:1,dueDays:30,invoiceType:'TAX_INVOICE',status:'ACTIVE',items:[{itemId:'',itemName:'',quantity:1,unit:'Pcs',rate:0,gstRate:18}]});
 
   useEffect(()=>{ fetchAll(); },[]);
@@ -65,12 +67,59 @@ export default function RecurringInvoicePage() {
     setForm(f=>({...f,items:rows}));
   };
 
-  const calcTotal = () => {
+  // ── Backend Calculation (Professional ERP Pattern) ──
+  const calcTimeoutRef = useRef(null);
+  
+  useEffect(() => {
+    if (calcTimeoutRef.current) clearTimeout(calcTimeoutRef.current);
+    
+    const validItems = (form.items || []).filter(it => it.itemId && it.quantity > 0);
+    if (validItems.length === 0) {
+      setCalculatedTotal(null);
+      return;
+    }
+    
+    calcTimeoutRef.current = setTimeout(async () => {
+      try {
+        const invoice = {
+          items: validItems.map(it => ({
+            itemId: it.itemId,
+            itemName: it.itemName,
+            hsnCode: it.hsnCode,
+            quantity: it.quantity,
+            unit: it.unit,
+            rate: it.rate,
+            discount: it.discount || 0,
+            gstRate: it.gstRate
+          })),
+          discount: 0,
+          freightCharge: 0,
+          packagingCharge: 0,
+          otherCharge: 0,
+          roundOff: 0
+        };
+        
+        const response = await calculateInvoice(invoice, false);
+        setCalculatedTotal(response.data.grandTotal);
+      } catch (err) {
+        // Silent fail - will use fallback
+      }
+    }, 300);
+    
+    return () => {
+      if (calcTimeoutRef.current) clearTimeout(calcTimeoutRef.current);
+    };
+  }, [form.items]);
+
+  // ── Fallback Frontend Calc (for offline/resilience) ──
+  const calcTotalFallback = () => {
     return (form.items||[]).reduce((s,r)=>{
       const base = (r.quantity||0)*(r.rate||0)*(1-(r.discount||0)/100);
       return s + base + base*(r.gstRate||0)/100;
     },0);
   };
+
+  const total = calculatedTotal || calcTotalFallback();
 
   return (
     <div>
@@ -243,7 +292,7 @@ export default function RecurringInvoicePage() {
                 </tbody>
                 <tfoot><tr>
                   <td colSpan={6} style={{textAlign:'right',padding:'8px',fontWeight:600}}>Invoice Total:</td>
-                  <td style={{padding:'8px',textAlign:'right',fontWeight:700,color:'#1a4f8a',fontSize:15}}>{fmt(calcTotal())}</td>
+                  <td style={{padding:'8px',textAlign:'right',fontWeight:700,color:'#1a4f8a',fontSize:15}}>{fmt(total)}</td>
                   <td></td>
                 </tr></tfoot>
               </table>

@@ -2,6 +2,7 @@ package com.erp.controller;
 
 import com.erp.model.RecurringInvoice;
 import com.erp.model.SalesInvoice;
+import com.erp.model.InvoiceLineItem;
 import com.erp.repository.*;
 import com.erp.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,10 +122,10 @@ public class RecurringInvoiceController {
             inv.setInvoiceNumber("SINV-" + String.format("%04d", count + 1));
 
             // Items
-            List<SalesInvoice.InvoiceItem> items = new ArrayList<>();
+            List<InvoiceLineItem> items = new ArrayList<>();
             if (ri.getItems() != null) {
                 for (RecurringInvoice.InvoiceItemTemplate t : ri.getItems()) {
-                    SalesInvoice.InvoiceItem item = new SalesInvoice.InvoiceItem();
+                    InvoiceLineItem item = new InvoiceLineItem();
                     item.setItemId(t.getItemId());
                     item.setItemName(t.getItemName());
                     item.setHsnCode(t.getHsnCode());
@@ -148,10 +149,10 @@ public class RecurringInvoiceController {
             }
             inv.setItems(items);
 
-            double sub = items.stream().mapToDouble(SalesInvoice.InvoiceItem::getTaxableAmount).sum();
-            double cgst = items.stream().mapToDouble(SalesInvoice.InvoiceItem::getCgstAmount).sum();
-            double sgst = items.stream().mapToDouble(SalesInvoice.InvoiceItem::getSgstAmount).sum();
-            double igst = items.stream().mapToDouble(SalesInvoice.InvoiceItem::getIgstAmount).sum();
+            double sub = items.stream().mapToDouble(InvoiceLineItem::getTaxableAmount).sum();
+            double cgst = items.stream().mapToDouble(InvoiceLineItem::getCgstAmount).sum();
+            double sgst = items.stream().mapToDouble(InvoiceLineItem::getSgstAmount).sum();
+            double igst = items.stream().mapToDouble(InvoiceLineItem::getIgstAmount).sum();
             inv.setSubTotal(sub);
             inv.setTotalCgst(cgst); inv.setTotalSgst(sgst); inv.setTotalIgst(igst);
             inv.setTotalGst(cgst+sgst+igst);

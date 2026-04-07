@@ -1,6 +1,6 @@
 import { printReport as printReportUtil } from '../utils/printUtils';
 import React, { useState, useEffect } from 'react';
-import { getExpenses, addExpense, updateExpense, deleteExpense, getExpenseHeads, addExpenseHead, updateExpenseHead, deleteExpenseHead } from '../services/api';
+import { getExpenses, addExpense, updateExpense, deleteExpense, getExpenseHeads, addExpenseHead, updateExpenseHead, deleteExpenseHead, calculateInvoice } from '../services/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useFY } from '../context/FYContext';
@@ -51,10 +51,41 @@ export default function ExpensePage() {
     if (!form.expenseHeadName?.trim()) { toast.error('Expense Head is required'); return; }
     if (!form.amount || Number(form.amount) <= 0) { toast.error('Amount must be greater than 0'); return; }
     if (!form.paymentMode)             { toast.error('Payment mode is required'); return; }
-    const gst  = calcGst(form.amount, form.gstRate);
+    
+    // Get totals from backend API
+    let cgst, sgst, total;
+    try {
+      const invoice = {
+        items: [{
+          itemId: 'expense',
+          itemName: form.expenseHeadName,
+          quantity: 1,
+          rate: form.amount,
+          discount: 0,
+          gstRate: form.gstRate || 0
+        }],
+        discount: 0,
+        freightCharge: 0,
+        packagingCharge: 0,
+        otherCharge: 0,
+        roundOff: 0
+      };
+      const response = await calculateInvoice(invoice, false);
+      cgst = response.data.totalCgst || 0;
+      sgst = response.data.totalSgst || 0;
+      total = response.data.grandTotal || form.amount;
+    } catch (err) {
+      // Fallback to frontend calc
+      const a = Number(form.amount)||0, r = Number(form.gstRate)||0;
+      const half = (a * r / 100) / 2;
+      cgst = half;
+      sgst = half;
+      total = a + a * r / 100;
+    }
+    
     const head = heads.find(h => h.headName === form.expenseHeadName);
     try {
-      const data = { ...form, expenseHeadId:head?.id, cgstAmount:gst.cgst, sgstAmount:gst.sgst, totalAmount:gst.total, financialYear:selectedFY.label, status:'APPROVED' };
+      const data = { ...form, expenseHeadId:head?.id, cgstAmount:cgst, sgstAmount:sgst, totalAmount:total, financialYear:selectedFY.label, status:'APPROVED' };
       if (form.id) { await updateExpense(form.id, data); toast.success('Expense updated!'); }
       else         { await addExpense(data);             toast.success('Expense saved!'); }
       setModal(null); setForm({ paymentMode:'CASH', gstRate:0 }); fetchAll();

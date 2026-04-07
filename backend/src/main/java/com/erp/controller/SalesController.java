@@ -5,6 +5,7 @@ import com.erp.model.Customer;
 import com.erp.model.SalesInvoice;
 import com.erp.model.SalesOrder;
 import com.erp.model.SalesReturn;
+import com.erp.model.InvoiceLineItem;
 import com.erp.repository.SalesReturnRepository;
 import com.erp.service.AuditLogService;
 import com.erp.repository.AccountingVoucherRepository;
@@ -16,6 +17,7 @@ import com.erp.repository.StockMovementRepository;
 import com.erp.model.StockMovement;
 import com.erp.service.AutoPostingService;
 import com.erp.service.LedgerPostingService;
+import com.erp.service.InvoiceCalculationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,6 +43,7 @@ public class SalesController {
     @Autowired private StockMovementRepository stockMovRepo;
     @Autowired private AccountingVoucherRepository voucherRepo;
     @Autowired private LedgerPostingService ledgerPostingService;
+    @Autowired private InvoiceCalculationService calcService;
 
     @GetMapping("/customers")
     public List<Customer> getCustomers() { return customerRepo.findByActiveTrue(); }
@@ -266,26 +269,22 @@ public class SalesController {
         // DRAFT madhe stock check skip karo
         boolean isDraftCheck = "DRAFT".equals(invoice.getStatus());
         if (!isDraftCheck && invoice.getItems() != null) {
-            for (SalesInvoice.InvoiceItem item : invoice.getItems()) {
+            for (InvoiceLineItem item : invoice.getItems()) {
                 if (item.getItemId() != null && !item.getItemId().isEmpty()) {
                     var itemOpt = itemRepo.findById(item.getItemId());
                     if (itemOpt.isPresent()) {
                         double available = itemOpt.get().getCurrentStock();
                         if (item.getQuantity() <= 0) {
                             return ResponseEntity.badRequest().body(Map.of(
-                                "error", "Item '" + item.getItemName() + "': quantity 0 ya less than 0 nahi chalnar!"));
-                        }
-                    if (item.getQuantity() <= 0) {
-                            return ResponseEntity.badRequest().body(Map.of(
                                 "error", "Item '" + item.getItemName() + "': Quantity 0 ya negative nahi chalnar!"
                             ));
                         }
-                    if (item.getRate() < 0) {
-                        return ResponseEntity.badRequest().body(Map.of(
-                            "error", "Item '" + item.getItemName() + "': Rate negative nahi hona chahiye!"
-                        ));
-                    }
-                    if (item.getQuantity() > available) {
+                        if (item.getRate() < 0) {
+                            return ResponseEntity.badRequest().body(Map.of(
+                                "error", "Item '" + item.getItemName() + "': Rate negative nahi hona chahiye!"
+                            ));
+                        }
+                        if (item.getQuantity() > available) {
                             return ResponseEntity.badRequest().body(Map.of(
                                 "error", "Insufficient stock for '" + item.getItemName() +
                                          "'. Available: " + available + ", Required: " + item.getQuantity()
@@ -378,7 +377,7 @@ public class SalesController {
         if (!isDraft) {
             autoPosting.postSalesInvoice(saved);
             if (saved.getItems() != null) {
-                for (SalesInvoice.InvoiceItem item : saved.getItems()) {
+                for (InvoiceLineItem item : saved.getItems()) {
                     if (item.getItemId() == null || item.getItemId().isEmpty()) continue;
                     itemRepo.findById(item.getItemId()).ifPresent(invItem -> {
                         invItem.setCurrentStock(invItem.getCurrentStock() - item.getQuantity());
@@ -434,7 +433,7 @@ public class SalesController {
             // DRAFT → CONFIRMED: stock deduct + accounting post
             if (wasDraft && nowConfirmed) {
                 if (saved.getItems() != null) {
-                    for (SalesInvoice.InvoiceItem item : saved.getItems()) {
+                    for (InvoiceLineItem item : saved.getItems()) {
                         if (item.getItemId() == null) continue;
                         itemRepo.findById(item.getItemId()).ifPresent(invItem -> {
                             invItem.setCurrentStock(Math.max(0, invItem.getCurrentStock() - item.getQuantity()));
@@ -478,7 +477,7 @@ public class SalesController {
             invoiceRepo.save(inv);
 
             if (inv.getItems() != null) {
-                for (SalesInvoice.InvoiceItem item : inv.getItems()) {
+                for (InvoiceLineItem item : inv.getItems()) {
                     if (item.getItemId() == null || item.getItemId().isEmpty()) continue;
                     itemRepo.findById(item.getItemId()).ifPresent(invItem -> {
                         invItem.setCurrentStock(invItem.getCurrentStock() + item.getQuantity());
@@ -706,7 +705,7 @@ return ResponseEntity.ok(updated);
         // Auto-detect inter-state before calculating GST
         autoDetectInterState(invoice);
         double sub = 0, cgst = 0, sgst = 0, igst = 0;
-        for (SalesInvoice.InvoiceItem item : invoice.getItems()) {
+        for (InvoiceLineItem item : invoice.getItems()) {
             double base = item.getQuantity() * item.getRate() * (1 - (item.getDiscount() / 100.0));
             double gstAmt = base * item.getGstRate() / 100.0;
             item.setAmount(base);
@@ -736,7 +735,7 @@ return ResponseEntity.ok(updated);
 
         // Update each item's taxableAmount proportionally (for HSN table accuracy)
         if (invDiscPct > 0 && invoice.getItems() != null) {
-            for (SalesInvoice.InvoiceItem item : invoice.getItems()) {
+            for (InvoiceLineItem item : invoice.getItems()) {
                 item.setTaxableAmount(item.getTaxableAmount() * discFactor);
                 item.setCgstAmount(item.getCgstAmount() * discFactor);
                 item.setSgstAmount(item.getSgstAmount() * discFactor);
@@ -805,7 +804,7 @@ return ResponseEntity.ok(updated);
 
             // Stock check before converting
             if (inv.getItems() != null) {
-                for (SalesInvoice.InvoiceItem item : inv.getItems()) {
+                for (InvoiceLineItem item : inv.getItems()) {
                     if (item.getItemId() == null || item.getItemId().isEmpty()) continue;
                     var itemOpt = itemRepo.findById(item.getItemId());
                     if (itemOpt.isPresent()) {
@@ -847,7 +846,7 @@ return ResponseEntity.ok(updated);
 
             // Deduct stock
             if (saved.getItems() != null) {
-                for (SalesInvoice.InvoiceItem item : saved.getItems()) {
+                for (InvoiceLineItem item : saved.getItems()) {
                     if (item.getItemId() == null || item.getItemId().isEmpty()) continue;
                     itemRepo.findById(item.getItemId()).ifPresent(invItem -> {
                         invItem.setCurrentStock(invItem.getCurrentStock() - item.getQuantity());
@@ -995,7 +994,7 @@ return ResponseEntity.ok(updated);
         Map<String, Map<String, Object>> byItem = new java.util.LinkedHashMap<>();
         for (SalesInvoice inv : all) {
             if (inv.getItems() == null) continue;
-            for (SalesInvoice.InvoiceItem item : inv.getItems()) {
+            for (InvoiceLineItem item : inv.getItems()) {
                 String name = item.getItemName() != null ? item.getItemName() : "Unknown";
                 byItem.computeIfAbsent(name, k -> {
                     Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -1172,4 +1171,45 @@ return ResponseEntity.ok(updated);
         }
     }
 
+    // ── Invoice Calculation from Backend ──────────────────────────────────────────
+    @PostMapping("/invoices/calculate")
+    public ResponseEntity<?> calculateInvoiceTotals(@RequestBody SalesInvoice invoice,
+            @RequestParam(required=false, defaultValue="false") boolean isInterState) {
+        if (invoice.getItems() == null || invoice.getItems().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No items to calculate"));
+        }
+        
+        // Convert InvoiceLineItem to InvoiceLineItem format for calculation
+        List<com.erp.model.InvoiceLineItem> lineItems = invoice.getItems().stream()
+            .map(item -> {
+                com.erp.model.InvoiceLineItem li = new com.erp.model.InvoiceLineItem();
+                li.setItemId(item.getItemId());
+                li.setItemName(item.getItemName());
+                li.setQuantity(item.getQuantity());
+                li.setRate(item.getRate());
+                li.setDiscountPercent(item.getDiscount());
+                li.setGstPercent(item.getGstRate());
+                li.setHsnCode(item.getHsnCode());
+                return li;
+            })
+            .collect(Collectors.toList());
+        
+        // Use the calculation service
+        com.erp.model.SalesInvoice calcInvoice = new com.erp.model.SalesInvoice();
+        calcInvoice.setItems(lineItems);
+        
+        var result = calcService.calculateInvoice(calcInvoice, isInterState);
+        
+        return ResponseEntity.ok(Map.of(
+            "totalTaxable", result.totalTaxable(),
+            "totalCGST", result.totalCGST(),
+            "totalSGST", result.totalSGST(),
+            "totalIGST", result.totalIGST(),
+            "totalDiscount", result.totalDiscount(),
+            "totalCess", result.totalCess(),
+            "grandTotal", result.grandTotal(),
+            "itemBreakdown", result.itemCalcs()
+        ));
+    }
 }
+

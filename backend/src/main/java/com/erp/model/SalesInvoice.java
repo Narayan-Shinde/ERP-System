@@ -32,7 +32,7 @@ private String salesmanId;
     private LocalDate invoiceDate;
     private LocalDate dueDate;
     private String financialYear;
-    private List<InvoiceItem> items;
+    private List<InvoiceLineItem> items;
     private double subTotal;
     private double totalCgst;
     private double totalSgst;
@@ -101,28 +101,5 @@ private String salesmanId;
         private String notes;
         private String recordedBy;
         private java.time.LocalDateTime recordedAt = java.time.LocalDateTime.now();
-    }
-
-    @Data
-    @NoArgsConstructor
-    public static class InvoiceItem {
-        private String itemId;
-        private String itemName;
-        private String hsnCode;
-        private double quantity;
-        private String unit;
-        private double rate;
-        private double discount;
-        private double taxableAmount;  // qty × rate (without GST)
-        private double gstAmt;         // total GST amount for this row
-        private double amount;         // taxable + gstAmt (grand total per row)
-        private double gstRate;
-        private double cgstRate;
-        private double sgstRate;
-        private double igstRate;
-        private double cgstAmount;
-        private double sgstAmount;
-        private double igstAmount;
-        private double totalAmount;
     }
 }

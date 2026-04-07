@@ -7,9 +7,10 @@ import com.erp.model.LedgerAccount;
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.Supplier;
 import com.erp.model.Customer;
+import com.erp.model.PurchaseReturn;
 import com.erp.model.SalesInvoice;
 import com.erp.model.SalesReturn;
-import com.erp.model.PurchaseReturn;
+import com.erp.model.InvoiceLineItem;
 import com.erp.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -897,7 +898,7 @@ public class ReportsController {
             double cost = 0;
 
             if (inv.getItems() != null) {
-                for (SalesInvoice.InvoiceItem item : inv.getItems()) {
+                for (InvoiceLineItem item : inv.getItems()) {
                     double purchaseRate = purchaseCostMap.getOrDefault(item.getItemId(),
                             item.getRate() * 0.7); // estimate 70% if no purchase data
                     cost += item.getQuantity() * purchaseRate;

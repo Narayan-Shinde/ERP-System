@@ -70,6 +70,7 @@ export const deleteCustomer         = id        => API.delete(`/sales/customers/
 export const getSalesInvoices       = p         => API.get('/sales/invoices', {params:p});
 export const addSalesInvoice        = d         => API.post('/sales/invoices', d);
 export const updateSalesInvoice     = (id,d)    => API.put(`/sales/invoices/${id}`, d);
+export const calculateInvoice       = (d,isInterState) => API.post('/sales/invoices/calculate', d, {params:{isInterState:isInterState||false}});
 export const recordSalesPayment     = (id,p)    => API.put(`/sales/invoices/${id}/payment`, null, {params:p});
 export const cancelSalesInvoice     = (id,r)    => API.delete(`/sales/invoices/${id}`, {params:{reason:r||'Cancelled'}});
 export const getSalesOrders         = p         => API.get('/sales/orders', {params:p});
@@ -118,6 +119,12 @@ export const addItem           = d       => API.post('/inventory/items', d);
 export const updateItem        = (id,d)  => API.put(`/inventory/items/${id}`, d);
 export const deleteItem        = id      => API.delete(`/inventory/items/${id}`);
 export const getLowStockItems  = ()      => API.get('/inventory/items/low-stock');
+
+// ── HSN Master API ─────────────────────────────────────────────
+export const searchHsn         = keyword => API.get('/hsn/search', { params: { keyword } });
+export const suggestHsn        = itemName => API.get('/inventory/items/suggest-hsn', { params: { itemName } });
+export const getHsnByCode      = code    => API.get(`/hsn/${code}`);
+export const getAllHsn         = ()      => API.get('/hsn');
 
 export const getGstConfigurations = ()      => API.get('/gst/configurations');
 export const addGstConfiguration  = d       => API.post('/gst/configurations', d);

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getBanks, getSuppliers, addSupplier, updateSupplier, deleteSupplier,
          getPurchaseInvoices, addPurchaseInvoice, updatePurchaseInvoice, cancelPurchaseInvoice, recordPurchasePayment,
          getPurchaseOrders, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
          getPurchaseReturns, addPurchaseReturn, updatePurchaseReturn,
          getGRNs, addGRN, getPurchaseRegister, getItems,
-         getPurchaseDebitNote, getSupplierStatement, getGstConfigurations } from '../services/api';
-import { mergeHsnMaster, gstRateForHsn } from '../utils/hsnMaster';
+         getPurchaseDebitNote, getSupplierStatement, getGstConfigurations,
+         calculateInvoice } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 import { useFY } from '../context/FYContext';
@@ -53,7 +53,8 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const [prItems, setPrItems] = useState([{itemId:'',itemName:'',quantity:1,unit:'Nos',rate:0,amount:0}]);
   const [editOrderId, setEditOrderId] = useState(null);
   const [editReturnId, setEditReturnId] = useState(null);
-  const [invItems, setInvItems] = useState([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
+  const [invItems, setInvItems]   = useState([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,gstRate:18}]);
+  const [calculatedTotals, setCalculatedTotals] = useState(null);
   const [payModal, setPayModal] = useState(null);
   const [payAmt, setPayAmt]   = useState('');
   const [payRef,  setPayRef]  = useState('');
@@ -79,14 +80,56 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     } catch { }
   };
 
-  const hsnMaster = useMemo(() => mergeHsnMaster(gstConfigs, items), [gstConfigs, items]);
   const gstRateOptions = useMemo(() => {
-    const s = new Set(GST_RATES);
-    hsnMaster.forEach((h) => s.add(h.gstRate));
-    return Array.from(s).sort((a, b) => a - b);
-  }, [hsnMaster]);
+    return Array.from(new Set(GST_RATES)).sort((a, b) => a - b);
+  }, []);
 
-  const calcTotals = (rows, f) => {
+  // ── Backend Invoice Calculation (Professional ERP Pattern) ──
+  const calcTimeoutRef = useRef(null);
+  
+  useEffect(() => {
+    if (calcTimeoutRef.current) clearTimeout(calcTimeoutRef.current);
+    
+    const validItems = invItems.filter(it => it.itemId && it.quantity > 0);
+    if (validItems.length === 0) {
+      setCalculatedTotals(null);
+      return;
+    }
+    
+    calcTimeoutRef.current = setTimeout(async () => {
+      try {
+        const invoice = {
+          items: validItems.map(it => ({
+            itemId: it.itemId,
+            itemName: it.itemName,
+            hsnCode: it.hsnCode,
+            quantity: it.quantity,
+            unit: it.unit,
+            rate: it.rate,
+            discount: it.discount,
+            gstRate: it.gstRate
+          })),
+          discount: form.discount || 0,
+          freightCharge: form.freightCharge || 0,
+          packagingCharge: form.packagingCharge || 0,
+          otherCharge: form.otherCharge || 0,
+          roundOff: form.roundOff || 0
+        };
+        
+        const response = await calculateInvoice(invoice, form.isInterState);
+        setCalculatedTotals(response.data);
+      } catch (err) {
+        // Silent fail - will use fallback calculation
+      }
+    }, 300);
+    
+    return () => {
+      if (calcTimeoutRef.current) clearTimeout(calcTimeoutRef.current);
+    };
+  }, [invItems, form.discount, form.freightCharge, form.packagingCharge, form.otherCharge, form.roundOff, form.isInterState]);
+
+  // ── Fallback Frontend Calc (for offline/resilience) ──
+  const calcTotalsFallback = (rows, f) => {
     let sub=0,cgst=0,sgst=0,igst=0;
     const interState = f?.isInterState || false;  // form-level flag (supplier state check)
     rows.forEach(it => {
@@ -136,11 +179,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
           const it = items.find((x) => x.id === val);
           if (it) {
             const hsn = (it.hsnCode || '').toString().trim();
-            let g = Number(it.gstRate);
-            if (!Number.isFinite(g)) {
-              const fromM = gstRateForHsn(hsnMaster, hsn);
-              g = fromM != null ? fromM : 18;
-            }
+            const g = Number(it.gstRate) || 18;
             r[i] = {
               ...r[i],
               itemId: val,
@@ -157,11 +196,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
         const it = items.find((x) => x.itemName === val || x.itemCode === val);
         if (it) {
           const hsn = (it.hsnCode || '').toString().trim();
-          let g = Number(it.gstRate);
-          if (!Number.isFinite(g)) {
-            const fromM = gstRateForHsn(hsnMaster, hsn);
-            g = fromM != null ? fromM : 18;
-          }
+          const g = Number(it.gstRate) || 18;
           r[i] = {
             ...r[i],
             itemId: it.id,
@@ -175,8 +210,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
       }
       if (field === 'hsnCode') {
         const code = String(val || '').trim();
-        const fromM = gstRateForHsn(hsnMaster, code);
-        r[i] = { ...r[i], hsnCode: code, ...(fromM != null ? { gstRate: fromM } : {}) };
+        r[i] = { ...r[i], hsnCode: code };
       }
       return r;
     });
@@ -230,7 +264,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     const badItem=invItems.find(i=>!i.itemName?.trim()||!i.quantity||i.quantity<=0||!i.rate||i.rate<=0);
     if(badItem){toast.error('All items must have name, quantity > 0, and rate > 0');return;}
     if(form.supplierGstin?.trim() && form.supplierGstin.trim().length!==15){toast.error('Supplier GSTIN 15 characters cha hava!');return;}
-    const totals=calcTotals(invItems,form);
+    const totals=calcTotalsFallback(invItems,form);
     const supp=suppliers.find(s=>s.id===form.supplierId);
     const data={...form,...totals,items:invItems,supplierName:supp?.supplierName||'',
       financialYear:selectedFY.label,paymentStatus:'PENDING',status:'CONFIRMED',
@@ -242,7 +276,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
 
   const saveAsDraft = async () => {
     if(!form.supplierId){toast.error('Select a supplier first');return;}
-    const totals=calcTotals(invItems,form);
+    const totals=calcTotalsFallback(invItems,form);
     const supp=suppliers.find(s=>s.id===form.supplierId);
     const data={...form,...totals,items:invItems,supplierName:supp?.supplierName||'',
       financialYear:selectedFY.label,paymentStatus:'PENDING',status:'DRAFT',
@@ -269,16 +303,41 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     if(!form.supplierId){toast.error('Select supplier');return;}
     const supp=suppliers.find(s=>s.id===form.supplierId);
     const validItems = poItems.filter(i=>i.itemName && i.quantity>0);
-    const grandTotal = validItems.reduce((s,i)=>s+(i.amount||0),0);
-    const totalGst   = validItems.reduce((s,i)=>s+(i.gstAmt||((i.taxableAmount||(i.quantity||0)*(i.rate||0))*(i.gstRate||0)/100)),0);
-    const subTotal   = grandTotal - totalGst;
+    
+    // Get totals from backend API
+    let totals;
+    try {
+      const invoice = {
+        items: validItems.map(it => ({
+          itemId: it.itemId,
+          itemName: it.itemName,
+          hsnCode: it.hsnCode,
+          quantity: it.quantity,
+          unit: it.unit,
+          rate: it.rate,
+          discount: it.discount || 0,
+          gstRate: it.gstRate
+        })),
+        discount: 0,
+        freightCharge: 0,
+        packagingCharge: 0,
+        otherCharge: 0,
+        roundOff: 0
+      };
+      const response = await calculateInvoice(invoice, form.isInterState);
+      totals = response.data;
+    } catch (err) {
+      // Fallback to frontend calc
+      totals = calcTotalsFallback(validItems, form);
+    }
+    
     const payload = {
       supplierId:form.supplierId, supplierName:supp?.supplierName||'',
       supplierGstin:supp?.gstin||'', supplierAddress:supp?.address||'',
       supplierCity:supp?.city||'', supplierState:supp?.state||'',
       supplierPhone:supp?.phone||'',
       poDate:form.orderDate||today(), expectedDeliveryDate:form.expectedDelivery||null,
-      grandTotal, subTotal, totalGst,
+      ...totals,
       notes:form.remarks||'', status: editOrderId ? (form.status||'DRAFT') : 'DRAFT',
       financialYear:selectedFY.label, items:validItems
     };
@@ -293,15 +352,40 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     if(!form.supplierId){toast.error('Select supplier');return;}
     if(!form.originalInvoiceId){toast.error('Against Invoice select करणे आवश्यक आहे');return;}
     const validItems = prItems.filter(i=>i.itemName && i.quantity>0);
-    const grandTotal  = validItems.reduce((s,i)=>s+(i.amount||0),0);
-    const totalGst    = validItems.reduce((s,i)=>s+(i.gstAmt||((i.taxableAmount||0)*(i.gstRate||0)/100)),0);
-    const subTotal    = grandTotal - totalGst;
+    
+    // Get totals from backend API
+    let totals;
+    try {
+      const invoice = {
+        items: validItems.map(it => ({
+          itemId: it.itemId,
+          itemName: it.itemName,
+          hsnCode: it.hsnCode,
+          quantity: it.quantity,
+          unit: it.unit,
+          rate: it.rate,
+          discount: it.discount || 0,
+          gstRate: it.gstRate
+        })),
+        discount: 0,
+        freightCharge: 0,
+        packagingCharge: 0,
+        otherCharge: 0,
+        roundOff: 0
+      };
+      const response = await calculateInvoice(invoice, form.isInterState);
+      totals = response.data;
+    } catch (err) {
+      // Fallback to frontend calc
+      totals = calcTotalsFallback(validItems, form);
+    }
+    
     const payload = {
       supplierId:form.supplierId, supplierName:form.supplierName||'',
       originalInvoiceId:form.originalInvoiceId||'',
       originalInvoiceNumber:form.invoiceNumber||'',
       returnDate:form.returnDate||today(),
-      grandTotal, subTotal, totalGst,
+      ...totals,
       reason:form.reason||'', status:'PENDING',
       financialYear:selectedFY.label, items:validItems
     };
@@ -334,7 +418,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     catch { toast.error('Failed to load'); }
   };
 
-  const totals = calcTotals(invItems);
+  const totals = calculatedTotals || calcTotalsFallback(invItems, form);
   const STATUS_COLOR = {PAID:'#16a34a',PARTIAL:'#d97706',PENDING:'#dc2626',RETURNED:'#7c3aed',CONFIRMED:'#2563eb',DRAFT:'#64748b',RECEIVED:'#16a34a',SENT:'#0891b2',PARTIALLY_RECEIVED:'#7c3aed',INVOICED:'#059669',CANCELLED:'#dc2626'};
 
   const tabList = [
@@ -838,16 +922,23 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
               </div>
               {/* Items */}
               <datalist id="purchase-inv-hsn-datalist">
-                {hsnMaster.map((h) => (
-                  <option key={h.hsnCode} value={h.hsnCode}>{h.description} — {h.gstRate}%</option>
-                ))}
+              {calculatedTotals && (
+                <span style={{fontSize:10,color:'#16a34a',background:'#dcfce7',padding:'2px 6px',borderRadius:4}}>
+                  ✓ Server Calculated
+                </span>
+              )}
+              {!calculatedTotals && (
+                <span style={{fontSize:10,color:'#d97706',background:'#fef3c7',padding:'2px 6px',borderRadius:4}}>
+                  Client Mode
+                </span>
+              )}
               </datalist>
               <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden',marginBottom:12}}>
                 <div style={{background:'#1a4f8a',color:'white',padding:'8px 12px',fontSize:12,display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr 1fr .5fr',gap:8,fontWeight:700}}>
                   <span>Item Name</span><span>HSN / SAC</span><span>Qty</span><span>Unit</span><span>Rate</span><span>GST%</span><span></span>
                 </div>
                 <div style={{fontSize:11,color:'#64748b',padding:'6px 10px',background:'#f1f5f9',borderBottom:'1px solid #e2e8f0'}}>
-                  आयटम निवडला की HSN व GST% ऑटो. यादी: <strong>{hsnMaster.length}</strong> (GST Config + Inventory + reference). इतर HSN GST मॉड्युलमध्ये जोडा.
+                  आयटम निवडला की HSN व GST% ऑटो. Inventory madhle values yetil.
                 </div>
                 {invItems.map((it,i)=>(
                   <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr 1fr .5fr',gap:8,padding:'6px 8px',borderBottom:'1px solid #f1f5f9',background:i%2?'#f8fafc':'white'}}>
@@ -876,6 +967,19 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
               {/* Totals */}
               <div style={{display:'flex',justifyContent:'flex-end'}}>
                 <div style={{background:'#f0f4ff',borderRadius:6,padding:'10px 16px',fontSize:13,minWidth:220}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <span style={{fontWeight:700,fontSize:14}}>Invoice Totals</span>
+                    {calculatedTotals && (
+                      <span style={{fontSize:10,color:'#16a34a',background:'#dcfce7',padding:'2px 6px',borderRadius:4}}>
+                        ✓ Server
+                      </span>
+                    )}
+                    {!calculatedTotals && (
+                      <span style={{fontSize:10,color:'#d97706',background:'#fef3c7',padding:'2px 6px',borderRadius:4}}>
+                        Client
+                      </span>
+                    )}
+                  </div>
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span>Taxable:</span><strong>{fmt(totals.subTotal)}</strong></div>
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,color:'#64748b'}}><span>CGST:</span><span>{fmt(totals.totalCgst)}</span></div>
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,color:'#64748b'}}><span>SGST:</span><span>{fmt(totals.totalSgst)}</span></div>
