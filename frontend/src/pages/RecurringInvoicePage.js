@@ -4,6 +4,7 @@ import {
   deleteRecurringInvoice, runRecurringNow, getCustomers, getItems,
   calculateInvoice
 } from '../services/api';
+import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 
 const fmt  = n => '₹' + (Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -19,6 +20,7 @@ export default function RecurringInvoicePage() {
   const [editId,    setEditId]    = useState(null);
   const [calculatedTotal, setCalculatedTotal] = useState(null);
   const [form,      setForm]      = useState({frequency:'MONTHLY',dayOfMonth:1,dueDays:30,invoiceType:'TAX_INVOICE',status:'ACTIVE',items:[{itemId:'',itemName:'',quantity:1,unit:'Pcs',rate:0,gstRate:18}]});
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(()=>{ fetchAll(); },[]);
 
@@ -175,16 +177,34 @@ export default function RecurringInvoicePage() {
                       fetchAll();
                     }}>{inv.status==='ACTIVE'?'⏸ Pause':'▶ Resume'}</button>
                   <button className="btn btn-sm btn-outline" style={{color:'#dc2626',borderColor:'#dc2626'}}
-                    onClick={async()=>{
-                      if(!window.confirm('Delete?')) return;
-                      await deleteRecurringInvoice(inv.id); toast.success('Deleted'); fetchAll();
-                    }}>🗑️</button>
+                    onClick={()=>setConfirmDelete(inv)}>🗑️</button>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* Confirm Delete Recurring Invoice */}
+      <ConfirmModal
+        open={!!confirmDelete}
+        title="Delete Recurring Invoice?"
+        message="This recurring invoice setup will be permanently deleted."
+        details={confirmDelete ? `${confirmDelete.name} — ${confirmDelete.frequency} — Customer: ${confirmDelete.customerName}` : ''}
+        confirmLabel="Yes, Delete"
+        type="danger"
+        onConfirm={async () => {
+          try {
+            await deleteRecurringInvoice(confirmDelete.id);
+            toast.success('Recurring invoice deleted');
+            fetchAll();
+          } catch (e) {
+            toast.error(e.response?.data?.error || 'Failed to delete');
+          }
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
 
       {/* MODAL */}
       {modal && (

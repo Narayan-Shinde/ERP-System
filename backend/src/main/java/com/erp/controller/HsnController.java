@@ -24,7 +24,7 @@ public class HsnController {
      * Search HSN by keyword (item name or description)
      * GET /api/hsn/search?keyword=rice
      */
-    @GetMapping("/search")
+    @GetMapping("/search-by-keyword")
     public ResponseEntity<?> searchHsn(@RequestParam String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Keyword is required"));

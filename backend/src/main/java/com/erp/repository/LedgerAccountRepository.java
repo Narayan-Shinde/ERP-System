@@ -1,6 +1,6 @@
 package com.erp.repository;
 
-import com.erp.model.LedgerAccount;
+import com.erp.model.ledger.LedgerAccount;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.List;
 

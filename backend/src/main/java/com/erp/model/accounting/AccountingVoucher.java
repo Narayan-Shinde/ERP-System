@@ -1,4 +1,4 @@
-package com.erp.model;
+package com.erp.model.accounting;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;

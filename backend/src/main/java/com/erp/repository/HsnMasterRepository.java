@@ -11,6 +11,8 @@ import java.util.Optional;
 @Repository
 public interface HsnMasterRepository extends MongoRepository<HsnMaster, String> {
 
+    Optional<HsnMaster> findByHsnCode(String hsnCode);
+
     Optional<HsnMaster> findByHsnCodeAndActiveTrue(String hsnCode);
 
     List<HsnMaster> findByActiveTrue();

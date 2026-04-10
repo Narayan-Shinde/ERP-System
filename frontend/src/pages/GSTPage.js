@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getGSTR3B, getITCReport, getGstConfigurations, addGstConfiguration, getGstLiability, getGSTR1, getCompanySettings } from '../services/api';
+import { getGSTR3B, getITCReport, getGstConfigurations, addGstConfiguration, deleteGstConfiguration, getGstLiability, getGSTR1, getCompanySettings } from '../services/api';
 import { printReport } from '../utils/printUtils';
+import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 
 const fmt  = n => '₹' + (Number(n)||0).toLocaleString('en-IN',{maximumFractionDigits:2});
@@ -20,6 +21,7 @@ export default function GSTPage() {
   const [loading, setLoading]  = useState(false);
   const [company, setCompany]  = useState({});
   const [gstr1Tab, setG1Tab]   = useState('b2b');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     getCompanySettings().then(r => setCompany(r.data||{})).catch(()=>{});
@@ -458,6 +460,9 @@ export default function GSTPage() {
                         <td style={{fontSize:11}}>{c.gstRate}%</td>
                         <td><span className="badge badge-secondary">{c.taxType||'GOODS'}</span></td>
                         <td><span className={`badge ${c.active?'badge-success':'badge-danger'}`}>{c.active?'Active':'Inactive'}</span></td>
+                        <td>
+                          <button className="btn btn-sm btn-outline" style={{color:'#dc2626',borderColor:'#dc2626'}} onClick={()=>setConfirmDelete(c)} title="Delete config">🗑️</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -505,6 +510,27 @@ export default function GSTPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete GST Config */}
+      <ConfirmModal
+        open={!!confirmDelete}
+        title="Delete GST Configuration?"
+        message="This HSN/SAC configuration will be permanently deleted."
+        details={confirmDelete ? `HSN: ${confirmDelete.hsnCode} — GST ${confirmDelete.gstRate}% (${confirmDelete.description || 'No description'})` : ''}
+        confirmLabel="Yes, Delete"
+        type="danger"
+        onConfirm={async () => {
+          try {
+            await deleteGstConfiguration(confirmDelete.id);
+            toast.success('GST configuration deleted');
+            getGstConfigurations().then(r => setConfigs(r.data || []));
+          } catch (e) {
+            toast.error(e.response?.data?.error || 'Failed to delete');
+          }
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

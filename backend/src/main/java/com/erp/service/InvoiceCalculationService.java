@@ -85,30 +85,60 @@ public class InvoiceCalculationService {
         return BigDecimal.valueOf(value).setScale(DECIMAL_PLACES, RoundingMode.HALF_UP).doubleValue();
     }
 
-    public record CalculationResult(
-        double totalTaxable,
-        double totalCGST,
-        double totalSGST,
-        double totalIGST,
-        double totalDiscount,
-        double totalCess,
-        double grandTotal,
-        List<LineItemCalc> itemCalcs
-    ) {}
+    public static class CalculationResult {
+        public double totalTaxable;
+        public double totalCGST;
+        public double totalSGST;
+        public double totalIGST;
+        public double totalDiscount;
+        public double totalCess;
+        public double grandTotal;
+        public List<LineItemCalc> itemCalcs;
+        
+        public CalculationResult(double totalTaxable, double totalCGST, double totalSGST, double totalIGST, 
+                                double totalDiscount, double totalCess, double grandTotal, List<LineItemCalc> itemCalcs) {
+            this.totalTaxable = totalTaxable;
+            this.totalCGST = totalCGST;
+            this.totalSGST = totalSGST;
+            this.totalIGST = totalIGST;
+            this.totalDiscount = totalDiscount;
+            this.totalCess = totalCess;
+            this.grandTotal = grandTotal;
+            this.itemCalcs = itemCalcs;
+        }
+    }
 
-    public record LineItemCalc(
-        String itemId,
-        String itemName,
-        double quantity,
-        double rate,
-        double baseAmount,
-        double discountPercent,
-        double discountAmount,
-        double taxableAmount,
-        double gstPercent,
-        double cgst,
-        double sgst,
-        double igst,
-        double cess
-    ) {}
+    public static class LineItemCalc {
+        public String itemId;
+        public String itemName;
+        public double quantity;
+        public double rate;
+        public double baseAmount;
+        public double discountPercent;
+        public double discountAmount;
+        public double taxableAmount;
+        public double gstPercent;
+        public double cgst;
+        public double sgst;
+        public double igst;
+        public double cess;
+        
+        public LineItemCalc(String itemId, String itemName, double quantity, double rate, double baseAmount,
+                          double discountPercent, double discountAmount, double taxableAmount, double gstPercent,
+                          double cgst, double sgst, double igst, double cess) {
+            this.itemId = itemId;
+            this.itemName = itemName;
+            this.quantity = quantity;
+            this.rate = rate;
+            this.baseAmount = baseAmount;
+            this.discountPercent = discountPercent;
+            this.discountAmount = discountAmount;
+            this.taxableAmount = taxableAmount;
+            this.gstPercent = gstPercent;
+            this.cgst = cgst;
+            this.sgst = sgst;
+            this.igst = igst;
+            this.cess = cess;
+        }
+    }
 }

@@ -1,6 +1,6 @@
 package com.erp.service;
 
-import com.erp.model.AccountingVoucher;
+import com.erp.model.accounting.AccountingVoucher;
 import com.erp.model.LedgerAccount;
 import com.erp.model.LedgerTransaction;
 import com.erp.repository.LedgerAccountRepository;

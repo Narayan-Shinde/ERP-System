@@ -1,9 +1,11 @@
 package com.erp.config;
 
+import com.erp.model.Customer;
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.PurchaseReturn;
 import com.erp.model.SalesInvoice;
 import com.erp.model.SalesReturn;
+import com.erp.model.Supplier;
 import com.erp.model.User;
 import com.erp.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -129,18 +131,18 @@ public class DataInitializer implements CommandLineRunner {
 
     private void fixOrphanPurchaseReturns() {
         int fixed = 0;
-        var orphanReturns = purchaseReturnRepo.findAll().stream()
+        java.util.List<PurchaseReturn> orphanReturns = purchaseReturnRepo.findAll().stream()
             .filter(r -> r.getOriginalInvoiceId() == null || r.getOriginalInvoiceId().isEmpty())
             .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
             .collect(java.util.stream.Collectors.toList());
 
-        for (var ret : orphanReturns) {
+        for (PurchaseReturn ret : orphanReturns) {
             if (ret.getSupplierId() == null) continue;
-            var invList = purchaseInvoiceRepo.findBySupplierId(ret.getSupplierId()).stream()
+            java.util.List<PurchaseInvoice> invList = purchaseInvoiceRepo.findBySupplierId(ret.getSupplierId()).stream()
                 .filter(i -> !i.isCancelled()).collect(java.util.stream.Collectors.toList());
 
             if (invList.size() == 1) {
-                var inv = invList.get(0);
+                PurchaseInvoice inv = invList.get(0);
                 ret.setOriginalInvoiceId(inv.getId());
                 ret.setOriginalInvoiceNumber(inv.getInvoiceNumber());
                 purchaseReturnRepo.save(ret);
@@ -164,15 +166,15 @@ public class DataInitializer implements CommandLineRunner {
         if (fixed > 0) {
             supplierRepo.findAll().forEach(s -> {
                 if (s.getId() != null) {
-                    var allInvoices = purchaseInvoiceRepo.findBySupplierId(s.getId()).stream()
+                    java.util.List<PurchaseInvoice> allInvoices = purchaseInvoiceRepo.findBySupplierId(s.getId()).stream()
                         .filter(i -> !i.isCancelled()).collect(java.util.stream.Collectors.toList());
-                    var retMapFix = new java.util.HashMap<String, Double>();
+                    java.util.Map<String, Double> retMapFix = new java.util.HashMap<>();
                     purchaseReturnRepo.findBySupplierId(s.getId()).stream()
                         .filter(r -> ("APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                             && r.getOriginalInvoiceId() != null && !r.getOriginalInvoiceId().isEmpty())
                         .forEach(r -> retMapFix.merge(r.getOriginalInvoiceId(), r.getGrandTotal(), Double::sum));
                     double weOwe = 0, supOwes = 0;
-                    for (var inv : allInvoices) {
+                    for (PurchaseInvoice inv : allInvoices) {
                         double retAmt    = Math.min(retMapFix.getOrDefault(inv.getId(), 0.0), inv.getGrandTotal());
                         double keptGoods = inv.getGrandTotal() - retAmt;
                         double paid      = inv.getPaidAmount();
@@ -252,16 +254,16 @@ public class DataInitializer implements CommandLineRunner {
 
     private void fixDuplicateStockMovements() {
         for (String refType : new String[]{"SALES_RETURN", "PURCHASE_RETURN"}) {
-            var movements = stockMovRepo.findAll().stream()
+            java.util.List<com.erp.model.StockMovement> movements = stockMovRepo.findAll().stream()
                 .filter(m -> refType.equals(m.getReferenceType())).collect(Collectors.toList());
             Map<String, List<com.erp.model.StockMovement>> grouped = movements.stream()
                 .collect(Collectors.groupingBy(m -> m.getReferenceNumber() + "|" + m.getItemId()));
-            for (var entry : grouped.entrySet()) {
-                var list = entry.getValue();
+            for (java.util.Map.Entry<String, java.util.List<com.erp.model.StockMovement>> entry : grouped.entrySet()) {
+                java.util.List<com.erp.model.StockMovement> list = entry.getValue();
                 if (list.size() <= 1) continue;
-                var toDelete = list.subList(1, list.size());
+                java.util.List<com.erp.model.StockMovement> toDelete = list.subList(1, list.size());
                 double dupQty = toDelete.stream().mapToDouble(com.erp.model.StockMovement::getQuantity).sum();
-                for (var dup : toDelete) stockMovRepo.delete(dup);
+                for (com.erp.model.StockMovement dup : toDelete) stockMovRepo.delete(dup);
                 itemRepo.findById(list.get(0).getItemId()).ifPresent(item -> {
                     double corrected = "SALES_RETURN".equals(refType)
                         ? Math.max(0, item.getCurrentStock() - dupQty)
@@ -328,13 +330,13 @@ public class DataInitializer implements CommandLineRunner {
 
     private void fixInvoicePartyDetails() {
         int fixed = 0;
-        for (var inv : salesInvoiceRepo.findAll()) {
+        for (SalesInvoice inv : salesInvoiceRepo.findAll()) {
             if (inv.getCustomerId() == null || inv.isCancelled()) continue;
             boolean needsFix = (inv.getCustomerAddress() == null || inv.getCustomerAddress().isEmpty());
             if (!needsFix) continue;
-            var custOpt = customerRepo.findById(inv.getCustomerId());
+            java.util.Optional<Customer> custOpt = customerRepo.findById(inv.getCustomerId());
             if (custOpt.isEmpty()) continue;
-            var cust = custOpt.get();
+            Customer cust = custOpt.get();
             if (inv.getCustomerGstin() == null || inv.getCustomerGstin().isEmpty()) inv.setCustomerGstin(cust.getGstin());
             if (inv.getCustomerAddress() == null || inv.getCustomerAddress().isEmpty()) inv.setCustomerAddress(cust.getAddress());
             if (inv.getCustomerCity() == null || inv.getCustomerCity().isEmpty()) inv.setCustomerCity(cust.getCity());
@@ -351,9 +353,9 @@ public class DataInitializer implements CommandLineRunner {
             if (inv.getSupplierId() == null || inv.isCancelled()) continue;
             boolean needsFix = (inv.getSupplierGstin() == null || inv.getSupplierGstin().isEmpty());
             if (!needsFix) continue;
-            var supOpt = supplierRepo.findById(inv.getSupplierId());
+            java.util.Optional<Supplier> supOpt = supplierRepo.findById(inv.getSupplierId());
             if (supOpt.isEmpty()) continue;
-            var sup = supOpt.get();
+            Supplier sup = supOpt.get();
             if (inv.getSupplierGstin() == null || inv.getSupplierGstin().isEmpty()) inv.setSupplierGstin(sup.getGstin());
             if (inv.getSupplierAddress() == null || inv.getSupplierAddress().isEmpty()) inv.setSupplierAddress(sup.getAddress());
             if (inv.getSupplierCity() == null || inv.getSupplierCity().isEmpty()) inv.setSupplierCity(sup.getCity());
@@ -366,11 +368,11 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void fixAllSupplierBalances() {
-        for (var sup : supplierRepo.findAll()) {
+        for (Supplier sup : supplierRepo.findAll()) {
             String sid = sup.getId();
-            var allInv = purchaseInvoiceRepo.findBySupplierId(sid).stream()
+            java.util.List<PurchaseInvoice> allInv = purchaseInvoiceRepo.findBySupplierId(sid).stream()
                 .filter(i -> !i.isCancelled()).collect(Collectors.toList());
-            var allRet = purchaseReturnRepo.findBySupplierId(sid).stream()
+            java.util.List<PurchaseReturn> allRet = purchaseReturnRepo.findBySupplierId(sid).stream()
                 .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                 .collect(Collectors.toList());
 
@@ -396,22 +398,22 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void fixAllCustomerBalances() {
-        for (var cust : customerRepo.findAll()) {
+        for (Customer cust : customerRepo.findAll()) {
             String cid = cust.getId();
-            var allInv = salesInvoiceRepo.findByCustomerId(cid).stream()
+            java.util.List<SalesInvoice> allInv = salesInvoiceRepo.findByCustomerId(cid).stream()
                 .filter(i -> !i.isCancelled()).collect(Collectors.toList());
-            var allRet = salesReturnRepo.findByCustomerId(cid).stream()
+            java.util.List<SalesReturn> allRet = salesReturnRepo.findByCustomerId(cid).stream()
                 .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                 .collect(Collectors.toList());
 
             java.util.Map<String, Double> retMap = new java.util.HashMap<>();
-            for (var ret : allRet) {
+            for (SalesReturn ret : allRet) {
                 if (ret.getOriginalInvoiceId() == null) continue;
                 retMap.merge(ret.getOriginalInvoiceId(), ret.getGrandTotal(), Double::sum);
             }
 
             double customerOwes = 0, weOweCustomer = 0;
-            for (var inv : allInv) {
+            for (SalesInvoice inv : allInv) {
                 double returnAmt = Math.min(retMap.getOrDefault(inv.getId(), 0.0), inv.getGrandTotal());
                 double keptGoods = inv.getGrandTotal() - returnAmt;
                 double paid      = inv.getPaidAmount();

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  getBanks, getBankStatements, addBankStatement,
+  getBanks, getBankStatements, addBankStatement, deleteBankStatement,
   reconcileEntry, getUnreconciledEntries
 } from '../services/api';
+import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 
 const fmt = n => '₹' + (Number(n)||0).toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2});
@@ -21,6 +22,7 @@ export default function BankReconciliationPage() {
   const [toDate,       setToDate]       = useState('');
   const [loading,      setLoading]      = useState(false);
   const [summary,      setSummary]      = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => { fetchBanks(); }, []);
   useEffect(() => { if(selectedBank) fetchData(); }, [selectedBank, fromDate, toDate, tab]);
@@ -204,6 +206,7 @@ export default function BankReconciliationPage() {
                                 🔗 Match
                               </button>
                             )}
+                            <button className="btn btn-sm btn-outline" style={{color:'#dc2626',borderColor:'#dc2626',marginLeft:6}} onClick={()=>setConfirmDelete(entry)} title="Delete entry">🗑️</button>
                           </td>
                         </tr>
                       );
@@ -349,6 +352,27 @@ export default function BankReconciliationPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Bank Statement */}
+      <ConfirmModal
+        open={!!confirmDelete}
+        title="Delete Bank Statement Entry?"
+        message="This bank statement entry will be permanently deleted."
+        details={confirmDelete ? `Date: ${confirmDelete.transactionDate} — ${confirmDelete.description || 'No description'} — ${confirmDelete.debitAmount > 0 ? fmt(confirmDelete.debitAmount) + ' Dr' : fmt(confirmDelete.creditAmount) + ' Cr'}` : ''}
+        confirmLabel="Yes, Delete"
+        type="danger"
+        onConfirm={async () => {
+          try {
+            await deleteBankStatement(confirmDelete.id);
+            toast.success('Bank statement entry deleted');
+            fetchData();
+          } catch (e) {
+            toast.error(e.response?.data?.error || 'Failed to delete');
+          }
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

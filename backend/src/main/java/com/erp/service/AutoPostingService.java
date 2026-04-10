@@ -1,7 +1,8 @@
 package com.erp.service;
 
-import com.erp.model.AccountingVoucher;
-import com.erp.model.LedgerAccount;
+import com.erp.model.accounting.AccountingVoucher;
+import com.erp.model..LedgerAccount;
+import com.erp.model.ledger.LedgerTransaction;
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.SalesInvoice;
 import com.erp.model.BankAccount;
@@ -24,7 +25,7 @@ public class AutoPostingService {
 
     private LedgerAccount getOrCreateLedger(String name, String group, String balanceType) {
         // Direct lookup by name (case-insensitive)
-        var direct = ledgerRepo.findByAccountNameIgnoreCase(name);
+        java.util.Optional<LedgerAccount> direct = ledgerRepo.findByAccountNameIgnoreCase(name);
         return direct.isPresent() ? direct.get() : ledgerRepo.findAll().stream()
             .filter(l -> name != null && name.equalsIgnoreCase(l.getAccountName()))
             .findFirst()
@@ -35,14 +36,27 @@ public class AutoPostingService {
                 la.setCurrentBalance(0.0);
                 la.setCurrentBalanceType(balanceType);
                 la.setActive(true);
-                String prefix = switch (group) {
-                    case "ASSET"     -> "1";
-                    case "LIABILITY" -> "2";
-                    case "EQUITY"    -> "3";
-                    case "INCOME"    -> "4";
-                    case "EXPENSE"   -> "5";
-                    default          -> "9";
-                };
+                String prefix;
+                switch (group) {
+                    case "ASSET":
+                        prefix = "1";
+                        break;
+                    case "LIABILITY":
+                        prefix = "2";
+                        break;
+                    case "EQUITY":
+                        prefix = "3";
+                        break;
+                    case "INCOME":
+                        prefix = "4";
+                        break;
+                    case "EXPENSE":
+                        prefix = "5";
+                        break;
+                    default:
+                        prefix = "9";
+                        break;
+                }
                 la.setAccountCode(prefix + String.format("%03d", ledgerRepo.count() + 1));
                 return ledgerRepo.save(la);
             });

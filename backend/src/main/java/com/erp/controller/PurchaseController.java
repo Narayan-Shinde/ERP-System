@@ -1,6 +1,6 @@
 package com.erp.controller;
 
-import com.erp.model.AccountingVoucher;
+import com.erp.model.accounting.AccountingVoucher;
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.PurchaseOrder;
 import com.erp.model.PurchaseReturn;

@@ -12,6 +12,7 @@ import {
   suggestHsn
 } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
+import HsnAutoComplete from '../components/HsnAutoComplete';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -564,8 +565,11 @@ export default function InventoryPage() {
                                   onClick={()=>openBatchModal(i)}>📋 Batch</button>
                               )}
                               {isAdmin && (
-                                <button className="btn btn-outline" style={{padding:'3px 7px',fontSize:10,borderColor:'#dc2626',color:'#dc2626'}}
-                                  onClick={()=>setConfirmDeleteItem(i)}>🗑️</button>
+                                <button className="btn btn-outline" style={{padding:'3px 7px',fontSize:10,borderColor:'#dc2626',color:'#dc2626',opacity:i.currentStock===0?1:0.5,cursor:i.currentStock===0?'pointer':'not-allowed'}}
+                                  onClick={()=>{
+                                    if(i.currentStock===0) setConfirmDeleteItem(i);
+                                    else toast.error('⚠️ Stock 0 nahi aahe! Item delete karaycha asel tar adhi stock 0 kara.');
+                                  }}>🗑️</button>
                               )}
                             </div>
                           </td>
@@ -611,8 +615,8 @@ export default function InventoryPage() {
                         <td style={{display:'flex',gap:4}}>
                           <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11}}
                             onClick={()=>{setEditCat(c);setCatForm({categoryName:c.categoryName,description:c.description||''});setShowModal('cat');}}>✏️ Edit</button>
-                          {isAdmin && <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,borderColor:'#dc2626',color:'#dc2626'}}
-                            onClick={()=>setConfirmDeleteCat(c)}>🗑️ Del</button>}
+                          <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,borderColor:'#dc2626',color:'#dc2626'}}
+                            onClick={()=>setConfirmDeleteCat(c)}>🗑️ Del</button>
                         </td>
                       </tr>
                     ))}
@@ -800,11 +804,17 @@ export default function InventoryPage() {
                     placeholder="Enter item name"/>
                 </div>
                 <div className="form-group">
-                  <label>HSN Code <span style={{fontSize:10,color:'#94a3b8'}}>(Auto-filled from backend)</span></label>
-                  <input value={form.hsnCode||''}
-                    onChange={e=>setForm({...form,hsnCode:e.target.value})}
-                    placeholder="HSN code auto-filled from item name..." style={{width:'100%'}}/>
-                  {form.hsnDescription && <div style={{fontSize:11,color:'#059669',marginTop:2}}>✓ {form.hsnDescription} | GST: {form.gstRate}%</div>}
+                  <label>HSN Code <span style={{fontSize:10,color:'#94a3b8'}}>(8-digit auto-suggest)</span></label>
+                  <HsnAutoComplete
+                    value={form.hsnCode}
+                    onChange={(hsnCode) => setForm({...form, hsnCode})}
+                    onGstRateChange={(gstRate) => setForm({...form, gstRate})}
+                    placeholder="Type item name to search HSN..."
+                    showGstRate={true}
+                  />
+                  <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
+                    💡 Item name type करा - exact 8-digit HSN code auto-fill होईल
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Category</label>

@@ -1,7 +1,7 @@
 package com.erp.controller;
 
-import com.erp.model.LedgerAccount;
-import com.erp.model.LedgerTransaction;
+import com.erp.model.ledger.LedgerAccount;
+import com.erp.model.ledger.LedgerTransaction;
 import com.erp.repository.LedgerAccountRepository;
 import com.erp.repository.LedgerTransactionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,14 +36,27 @@ public class LedgerController {
         if (ledger.getAccountGroup() == null)
             return ResponseEntity.badRequest().body(Map.of("error", "Account group is required"));
         if (ledger.getAccountCode() == null || ledger.getAccountCode().isEmpty()) {
-            String prefix = switch (ledger.getAccountGroup()) {
-                case "ASSET"     -> "1";
-                case "LIABILITY" -> "2";
-                case "EQUITY"    -> "3";
-                case "INCOME"    -> "4";
-                case "EXPENSE"   -> "5";
-                default          -> "9";
-            };
+            String prefix;
+            switch (ledger.getAccountGroup()) {
+                case "ASSET":
+                    prefix = "1";
+                    break;
+                case "LIABILITY":
+                    prefix = "2";
+                    break;
+                case "EQUITY":
+                    prefix = "3";
+                    break;
+                case "INCOME":
+                    prefix = "4";
+                    break;
+                case "EXPENSE":
+                    prefix = "5";
+                    break;
+                default:
+                    prefix = "9";
+                    break;
+            }
             ledger.setAccountCode(prefix + String.format("%03d", ledgerRepo.count() + 1));
         }
         ledger.setActive(true);

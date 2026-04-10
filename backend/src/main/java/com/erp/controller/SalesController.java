@@ -1,6 +1,6 @@
 package com.erp.controller;
 
-import com.erp.model.AccountingVoucher;
+import com.erp.model.accounting.AccountingVoucher;
 import com.erp.model.Customer;
 import com.erp.model.SalesInvoice;
 import com.erp.model.SalesOrder;
@@ -1201,14 +1201,14 @@ return ResponseEntity.ok(updated);
         var result = calcService.calculateInvoice(calcInvoice, isInterState);
         
         return ResponseEntity.ok(Map.of(
-            "totalTaxable", result.totalTaxable(),
-            "totalCGST", result.totalCGST(),
-            "totalSGST", result.totalSGST(),
-            "totalIGST", result.totalIGST(),
-            "totalDiscount", result.totalDiscount(),
-            "totalCess", result.totalCess(),
-            "grandTotal", result.grandTotal(),
-            "itemBreakdown", result.itemCalcs()
+            "totalTaxable", result.totalTaxable,
+            "totalCGST", result.totalCGST,
+            "totalSGST", result.totalSGST,
+            "totalIGST", result.totalIGST,
+            "totalDiscount", result.totalDiscount,
+            "totalCess", result.totalCess,
+            "grandTotal", result.grandTotal,
+            "itemBreakdown", result.itemCalcs
         ));
     }
 }

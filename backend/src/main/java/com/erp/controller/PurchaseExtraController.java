@@ -1,5 +1,6 @@
 package com.erp.controller;
 
+import com.erp.model.PurchaseInvoice;
 import com.erp.model.StockMovement;
 import com.erp.model.GoodsReceiptNote;
 import com.erp.model.PurchaseOrder;
@@ -34,20 +35,20 @@ public class PurchaseExtraController {
 
     private void recalcSupplierBalance(String supplierId) {
         supplierRepo.findById(supplierId).ifPresent(sup -> {
-            var allInvoices = invoiceRepo.findBySupplierId(supplierId).stream()
+            java.util.List<PurchaseInvoice> allInvoices = invoiceRepo.findBySupplierId(supplierId).stream()
                 .filter(i -> !i.isCancelled()).collect(java.util.stream.Collectors.toList());
-            var allReturns = returnRepo.findBySupplierId(supplierId).stream()
+            java.util.List<PurchaseReturn> allReturns = returnRepo.findBySupplierId(supplierId).stream()
                 .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                 .collect(java.util.stream.Collectors.toList());
 
             java.util.Map<String, Double> retMap = new java.util.HashMap<>();
-            for (var ret : allReturns) {
+            for (PurchaseReturn ret : allReturns) {
                 if (ret.getOriginalInvoiceId() == null || ret.getOriginalInvoiceId().isEmpty()) continue;
                 retMap.merge(ret.getOriginalInvoiceId(), ret.getGrandTotal(), Double::sum);
             }
 
             double weOwe = 0, supOwes = 0;
-            for (var inv : allInvoices) {
+            for (PurchaseInvoice inv : allInvoices) {
                 double returnAmt = Math.min(retMap.getOrDefault(inv.getId(), 0.0), inv.getGrandTotal());
                 double keptGoods = inv.getGrandTotal() - returnAmt;
                 double paid      = inv.getPaidAmount();
@@ -110,9 +111,9 @@ public class PurchaseExtraController {
         int fixed = 0;
         for (PurchaseReturn pr : completedReturns) {
             if (pr.getOriginalInvoiceId() == null || pr.getOriginalInvoiceId().isEmpty()) continue;
-            var invoiceOpt = invoiceRepo.findById(pr.getOriginalInvoiceId());
+            java.util.Optional<PurchaseInvoice> invoiceOpt = invoiceRepo.findById(pr.getOriginalInvoiceId());
             if (invoiceOpt.isEmpty()) continue;
-            var invoice = invoiceOpt.get();
+            PurchaseInvoice invoice = invoiceOpt.get();
             if ("RETURNED".equals(invoice.getPaymentStatus()) || "PAID".equals(invoice.getPaymentStatus())) continue;
             double returnAmt  = pr.getGrandTotal();
             double keptGoods  = invoice.getGrandTotal() - returnAmt;
@@ -142,9 +143,9 @@ public class PurchaseExtraController {
 
         if (pr.getOriginalInvoiceId() != null && !pr.getOriginalInvoiceId().isEmpty()
                 && pr.getItems() != null) {
-            var invoiceOpt = invoiceRepo.findById(pr.getOriginalInvoiceId());
+            java.util.Optional<PurchaseInvoice> invoiceOpt = invoiceRepo.findById(pr.getOriginalInvoiceId());
             if (invoiceOpt.isPresent()) {
-                var invoice = invoiceOpt.get();
+                PurchaseInvoice invoice = invoiceOpt.get();
                 java.util.Map<String, Double> invoiceQtyMap = new java.util.HashMap<>();
                 if (invoice.getItems() != null)
                     invoice.getItems().forEach(it -> invoiceQtyMap.put(it.getItemId(), it.getQuantity()));

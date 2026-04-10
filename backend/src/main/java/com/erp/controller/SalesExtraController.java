@@ -1,5 +1,6 @@
 package com.erp.controller;
 
+import com.erp.model.SalesInvoice;
 import com.erp.model.StockMovement;
 import com.erp.model.Customer;
 import com.erp.model.SalesOrder;
@@ -80,9 +81,9 @@ public class SalesExtraController {
 
         if (sr.getOriginalInvoiceId() != null && !sr.getOriginalInvoiceId().isEmpty()
                 && sr.getItems() != null) {
-            var invoiceOpt = invoiceRepo.findById(sr.getOriginalInvoiceId());
+            java.util.Optional<SalesInvoice> invoiceOpt = invoiceRepo.findById(sr.getOriginalInvoiceId());
             if (invoiceOpt.isPresent()) {
-                var invoice = invoiceOpt.get();
+                SalesInvoice invoice = invoiceOpt.get();
                 java.util.Map<String, Double> invoiceQtyMap = new java.util.HashMap<>();
                 if (invoice.getItems() != null)
                     invoice.getItems().forEach(it -> invoiceQtyMap.put(it.getItemId(), it.getQuantity()));
@@ -165,19 +166,19 @@ public class SalesExtraController {
                 if (sr.getCustomerId() != null) {
                     final String custId = sr.getCustomerId();
                     customerRepo.findById(custId).ifPresent(cust -> {
-                        var allInv = invoiceRepo.findByCustomerId(custId).stream()
+                        java.util.List<SalesInvoice> allInv = invoiceRepo.findByCustomerId(custId).stream()
                             .filter(i -> !i.isCancelled()).collect(java.util.stream.Collectors.toList());
-                        var allRet = returnRepo.findByCustomerId(custId).stream()
+                        java.util.List<SalesReturn> allRet = returnRepo.findByCustomerId(custId).stream()
                             .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                             .collect(java.util.stream.Collectors.toList());
 
                         java.util.Map<String, Double> retMap = new java.util.HashMap<>();
-                        for (var ret : allRet) {
+                        for (SalesReturn ret : allRet) {
                             if (ret.getOriginalInvoiceId() == null) continue;
                             retMap.merge(ret.getOriginalInvoiceId(), ret.getGrandTotal(), Double::sum);
                         }
                         double customerOwes = 0, weOweCustomer = 0;
-                        for (var inv : allInv) {
+                        for (SalesInvoice inv : allInv) {
                             double returnAmt = Math.min(retMap.getOrDefault(inv.getId(), 0.0), inv.getGrandTotal());
                             double keptGoods = inv.getGrandTotal() - returnAmt;
                             double paid      = inv.getPaidAmount();

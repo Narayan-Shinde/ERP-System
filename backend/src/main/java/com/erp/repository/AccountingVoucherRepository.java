@@ -1,6 +1,6 @@
 package com.erp.repository;
 
-import com.erp.model.AccountingVoucher;
+import com.erp.model.accounting.AccountingVoucher;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import java.time.LocalDate;
 import java.util.List;

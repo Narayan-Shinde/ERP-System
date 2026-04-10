@@ -1,6 +1,6 @@
 package com.erp.controller;
 
-import com.erp.model.AccountingVoucher;
+import com.erp.model.accounting.AccountingVoucher;
 import com.erp.repository.AccountingVoucherRepository;
 import com.erp.service.AuditLogService;
 import com.erp.service.LedgerPostingService;
@@ -78,12 +78,21 @@ public class AccountingController {
             }
         }
         if (voucher.getVoucherNumber() == null || voucher.getVoucherNumber().isEmpty()) {
-            String prefix = switch (voucher.getVoucherType() != null ? voucher.getVoucherType() : "JOURNAL") {
-                case "PAYMENT"  -> "PMT";
-                case "RECEIPT"  -> "RCT";
-                case "CONTRA"   -> "CTR";
-                default         -> "JRN";
-            };
+            String prefix;
+            switch (voucher.getVoucherType() != null ? voucher.getVoucherType() : "JOURNAL") {
+                case "PAYMENT":
+                    prefix = "PMT";
+                    break;
+                case "RECEIPT":
+                    prefix = "RCT";
+                    break;
+                case "CONTRA":
+                    prefix = "CTR";
+                    break;
+                default:
+                    prefix = "JRN";
+                    break;
+            }
             voucher.setVoucherNumber(voucherSequenceService.nextManualVoucherNumber(prefix));
         }
         AccountingVoucher saved = voucherRepo.save(voucher);

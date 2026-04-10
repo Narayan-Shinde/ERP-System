@@ -9,6 +9,7 @@ import {
 } from '../services/api';
 import { printSalesInvoiceMulti } from '../utils/printUtils';
 import ConfirmModal from '../components/ConfirmModal';
+import HsnAutoComplete from '../components/HsnAutoComplete';
 import toast from 'react-hot-toast';
 import { useFY } from '../context/FYContext';
 import { useAuth } from '../context/AuthContext';
@@ -39,7 +40,7 @@ export default function SalesPage() {
 
   const [modal, setModal]         = useState(null);
   const [form,  setForm]          = useState({});
-  const [invItems, setInvItems]   = useState([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);
+  const [invItems, setInvItems]   = useState([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);
   const [calculatedTotals, setCalculatedTotals] = useState(null);
   const [editReturnId, setEditReturnId] = useState(null);
 
@@ -110,7 +111,7 @@ export default function SalesPage() {
             roundOff:f?.roundOff||0,grandTotal:grand};
   };
 
-  const addItemRow    = () => setInvItems(r=>[...r,{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);
+  const addItemRow    = () => setInvItems(r=>[...r,{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);
   const removeItemRow = i  => setInvItems(r=>r.filter((_,idx)=>idx!==i));
   const updateItemRow = (i, field, val) => {
     setInvItems((rows) => {
@@ -138,6 +139,14 @@ export default function SalesPage() {
       if (field === 'hsnCode') {
         const code = String(val || '').trim();
         r[i] = { ...r[i], hsnCode: code };
+      }
+      if (field === 'isCustom') {
+        // When toggling custom mode, reset item selection if turning on custom
+        if (val) {
+          r[i] = { ...r[i], itemId: '', itemName: '', hsnCode: '', isCustom: true };
+        } else {
+          r[i] = { ...r[i], isCustom: false };
+        }
       }
       return r;
     });
@@ -284,7 +293,7 @@ export default function SalesPage() {
       if(form.id) await updateSalesInvoice(form.id,data);
       else        await addSalesInvoice(data);
       toast.success(asDraft?'Draft saved!':'Invoice saved! ✅');
-      setModal(null);setForm({});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);
+      setModal(null);setForm({});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);
       fetchAll();
     } catch(e){toast.error(e.response?.data?.error||e.response?.data||'Save failed');}
   };
@@ -320,7 +329,7 @@ export default function SalesPage() {
       if(form.id) await updateSalesOrder(form.id,data);
       else        await addSalesOrder(data);
       toast.success('Order saved!');
-      setModal(null);setForm({});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);
+      setModal(null);setForm({});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);
       fetchAll();
     } catch(e){toast.error(e.response?.data?.error||'Failed');}
   };
@@ -342,7 +351,7 @@ export default function SalesPage() {
       else             await addSalesReturn(data);
       toast.success('Return saved!');
       setModal(null);setForm({});setEditReturnId(null);
-      setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);
+      setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);
       fetchAll();
     } catch(e){toast.error(e.response?.data?.error||'Failed');}
   };
@@ -377,7 +386,7 @@ export default function SalesPage() {
               <span style={{background:'#fee2e2',color:'#dc2626',padding:'4px 10px',borderRadius:12,fontSize:12,fontWeight:700}}>
                 Outstanding: {fmt(invoices.reduce((s,i)=>s+Math.max(0,(i.balanceDue||0)),0))}
               </span>
-              <button className="btn btn-primary" onClick={()=>{setForm({invoiceType:'TAX_INVOICE',invoiceDate:today()});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);setModal('invoice');}}>+ New Invoice</button>
+              <button className="btn btn-primary" onClick={()=>{setForm({invoiceType:'TAX_INVOICE',invoiceDate:today()});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);setModal('invoice');}}>+ New Invoice</button>
             </div>
           </div>
           <div className="card-body">
@@ -416,7 +425,7 @@ export default function SalesPage() {
                         )}
                         {inv.status!=='CANCELLED'&&(
                           <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11}}
-                            onClick={()=>{setForm({...inv});setInvItems(inv.items?.length?inv.items:[{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);setModal('invoice');}}>✏️</button>
+                            onClick={()=>{setForm({...inv});setInvItems(inv.items?.length?inv.items.map(it=>({...it,isCustom:it.isCustom||!it.itemId})):[{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);setModal('invoice');}}>✏️</button>
                         )}
                         {isAdmin&&inv.status!=='CANCELLED'&&(
                           <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#dc2626',borderColor:'#fca5a5'}}
@@ -475,7 +484,7 @@ export default function SalesPage() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">📋 Sales Orders</span>
-            <button className="btn btn-primary" onClick={()=>{setForm({orderDate:today()});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);setModal('order');}}>+ New Order</button>
+            <button className="btn btn-primary" onClick={()=>{setForm({orderDate:today()});setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);setModal('order');}}>+ New Order</button>
           </div>
           <div className="card-body">
             {orders.length>0?(
@@ -493,7 +502,7 @@ export default function SalesPage() {
                         <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#16a34a',borderColor:'#86efac'}}
                           onClick={()=>convertOrder(o)}>→ Invoice</button>
                         <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11}}
-                          onClick={()=>{setForm({...o});setInvItems(o.items?.length?o.items:[{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);setModal('order');}}>✏️</button>
+                          onClick={()=>{setForm({...o});setInvItems(o.items?.length?o.items.map(it=>({...it,isCustom:it.isCustom||!it.itemId})):[{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);setModal('order');}}>✏️</button>
                         {isAdmin&&(
                           <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#dc2626',borderColor:'#fca5a5'}}
                             onClick={()=>setConfirmDeleteOrder(o)}>🗑</button>
@@ -513,7 +522,7 @@ export default function SalesPage() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">↩️ Sales Returns</span>
-            <button className="btn btn-primary" onClick={()=>{setForm({});setEditReturnId(null);setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);setModal('return');}}>+ New Return</button>
+            <button className="btn btn-primary" onClick={()=>{setForm({});setEditReturnId(null);setInvItems([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);setModal('return');}}>+ New Return</button>
           </div>
           <div className="card-body">
             {returns.length>0?(
@@ -531,7 +540,7 @@ export default function SalesPage() {
                     <td>
                       <div style={{display:'flex',gap:4}}>
                         <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11}}
-                          onClick={()=>{setForm({...r});setInvItems(r.items?.length?r.items:[{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18}]);setEditReturnId(r.id);setModal('return');}}>✏️</button>
+                          onClick={()=>{setForm({...r});setInvItems(r.items?.length?r.items.map(it=>({...it,isCustom:it.isCustom||!it.itemId})):[{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);setEditReturnId(r.id);setModal('return');}}>✏️</button>
                         {r.status==='PENDING'&&isAdmin&&(
                           <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#16a34a',borderColor:'#86efac'}}
                             onClick={()=>setConfirmApproveReturn(r)}>✅ Approve</button>
@@ -743,19 +752,45 @@ export default function SalesPage() {
                   <span>Item Name</span><span>HSN / SAC</span><span>Qty</span><span>Unit</span><span>Rate</span><span>Disc%</span><span>GST%</span><span></span>
                 </div>
                 <div style={{fontSize:11,color:'#64748b',padding:'6px 10px',background:'#f1f5f9',borderBottom:'1px solid #e2e8f0'}}>
-                  आयटम निवडला की HSN व GST% आयटम मास्टर मधून येतो. (GST Config + Backend HSN Master)
+                  💡 Inventory item select करा किंवा "Custom" checkbox वर click करून नवीन item टाईप करा. HSN field मध्ये item name टाईप केल्यास exact 8-digit HSN code auto-suggest होईल!
                 </div>
                 {invItems.map((it,i)=>(
                   <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr .6fr 1fr .5fr',gap:8,padding:'6px 8px',borderBottom:'1px solid #f1f5f9',background:i%2?'#f8fafc':'white'}}>
-                    <select value={it.itemId||''} onChange={e=>updateItemRow(i,'itemId',e.target.value)}
-                      style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}>
-                      <option value="">-- Select Item --</option>
-                      {items.filter(x=>x.active!==false).map(x=>(
-                        <option key={x.id} value={x.id}>{x.itemName}{x.itemCode?' ('+x.itemCode+')':''} | Stock:{x.currentStock}</option>
-                      ))}
-                    </select>
-                    <input value={it.hsnCode||''} onChange={e=>updateItemRow(i,'hsnCode',e.target.value)}
-                      style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}} placeholder="HSN Code"/>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <input
+                          type="checkbox"
+                          checked={it.isCustom}
+                          onChange={e=>updateItemRow(i,'isCustom',e.target.checked)}
+                          title="Custom item (not in inventory)"
+                          style={{cursor:'pointer'}}
+                        />
+                        <span style={{fontSize:10,color:'#64748b'}}>Custom</span>
+                      </div>
+                      {it.isCustom ? (
+                        <input
+                          value={it.itemName}
+                          onChange={e=>updateItemRow(i,'itemName',e.target.value)}
+                          placeholder="Type item name..."
+                          style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}
+                        />
+                      ) : (
+                        <select value={it.itemId||''} onChange={e=>updateItemRow(i,'itemId',e.target.value)}
+                          style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}>
+                          <option value="">-- Select Item --</option>
+                          {items.filter(x=>x.active!==false).map(x=>(
+                            <option key={x.id} value={x.id}>{x.itemName}{x.itemCode?' ('+x.itemCode+')':''} | Stock:{x.currentStock}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <HsnAutoComplete
+                      value={it.hsnCode}
+                      onChange={(hsnCode) => updateItemRow(i,'hsnCode',hsnCode)}
+                      onGstRateChange={(gstRate) => updateItemRow(i,'gstRate',gstRate)}
+                      placeholder="HSN..."
+                      showGstRate={true}
+                    />
                     <input type="number" min="0.001" value={it.quantity} onChange={e=>updateItemRow(i,'quantity',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input value={it.unit||'Nos'} onChange={e=>updateItemRow(i,'unit',e.target.value)} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
                     <input type="number" min="0" value={it.rate} onChange={e=>updateItemRow(i,'rate',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>

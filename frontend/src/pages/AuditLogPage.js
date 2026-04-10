@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAuditLogs, getAuditByUser, getAuditByModule, getAuditByAction, getAuditByDate, clearOldAuditLogs } from '../services/api';
+import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 
 const ACTION_COLOR = {
@@ -18,6 +19,7 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(false);
   const [filter,  setFilter]  = useState({ user:'', module:'', action:'all', fromDate:'', toDate:'', search:'' });
   const [page,    setPage]    = useState(1);
+  const [confirmClear, setConfirmClear] = useState(null);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -119,6 +121,9 @@ export default function AuditLogPage() {
             </button>
             <button className="btn btn-outline" onClick={fetchLogs} disabled={loading} style={{ fontSize:12 }}>
               {loading ? '⏳ Loading...' : '🔄 Refresh'}
+            </button>
+            <button className="btn btn-outline" onClick={() => setConfirmClear({ count: logs.length })} disabled={loading || logs.length === 0} style={{ fontSize:12, borderColor: '#dc2626', color: '#dc2626' }}>
+              🗑️ Clear Old Logs
             </button>
           </div>
         </div>
@@ -312,6 +317,27 @@ export default function AuditLogPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm Clear Old Logs */}
+      <ConfirmModal
+        open={!!confirmClear}
+        title="Clear Old Audit Logs?"
+        message="All audit logs older than 90 days will be permanently deleted."
+        details={confirmClear ? `Total logs in system: ${confirmClear.count}` : ''}
+        confirmLabel="Yes, Clear Old Logs"
+        type="danger"
+        onConfirm={async () => {
+          try {
+            await clearOldAuditLogs();
+            toast.success('Old audit logs cleared successfully');
+            fetchLogs();
+          } catch (e) {
+            toast.error(e.response?.data?.error || 'Failed to clear old logs');
+          }
+          setConfirmClear(null);
+        }}
+        onCancel={() => setConfirmClear(null)}
+      />
     </div>
   );
 }

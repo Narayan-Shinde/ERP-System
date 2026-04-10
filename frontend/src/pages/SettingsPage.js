@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getCompanySettings, saveCompanySettings, getBanks, addBank, updateBank, setDefaultBank, deleteBank as deleteBankAPI} from '../services/api';
+import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 
 const hdrs = () => ({ 'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -524,6 +525,7 @@ function BankTab() {
   const [banks, setBanks]       = React.useState([]);
   const [modal, setModal]       = React.useState(false);
   const [editId, setEditId]     = React.useState(null);
+  const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [form, setForm]         = React.useState({
     bankName:'', accountNumber:'', ifscCode:'', branch:'',
     accountType:'CURRENT', openingBalance:0, isDefault:false
@@ -571,12 +573,14 @@ function BankTab() {
     } catch { toast.error('Failed'); }
   };
 
-  const deleteBank = async (id) => {
-    if (!window.confirm('Delete this bank?')) return;
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
     try {
-      await deleteBank(id);
-      toast.success('Bank deleted'); fetchBanks();
-    } catch { toast.error('Failed'); }
+      await deleteBankAPI(confirmDelete.id);
+      toast.success('Bank deleted');
+      fetchBanks();
+    } catch { toast.error('Failed to delete bank'); }
+    setConfirmDelete(null);
   };
 
   const fmt = n => '₹' + (Number(n)||0).toLocaleString('en-IN');
@@ -618,7 +622,7 @@ function BankTab() {
                     <button className="btn btn-outline" style={{fontSize:11,padding:'3px 8px',color:'#1a4f8a',borderColor:'#1a4f8a'}} onClick={() => setDefault(b.id)}>⭐ Set Default</button>
                   )}
                   {!b.isDefault && (
-                    <button className="btn btn-outline" style={{fontSize:11,padding:'3px 8px',color:'#dc2626',borderColor:'#fca5a5'}} onClick={() => deleteBank(b.id)}>🗑️</button>
+                    <button className="btn btn-outline" style={{fontSize:11,padding:'3px 8px',color:'#dc2626',borderColor:'#fca5a5'}} onClick={() => setConfirmDelete(b)}>🗑️</button>
                   )}
                 </div>
               </div>
@@ -684,6 +688,18 @@ function BankTab() {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Bank */}
+      <ConfirmModal
+        open={!!confirmDelete}
+        title="Delete Bank Account?"
+        message="This bank account will be permanently deleted."
+        details={confirmDelete ? `${confirmDelete.bankName} — Account: ${confirmDelete.accountNumber} — IFSC: ${confirmDelete.ifscCode}` : ''}
+        confirmLabel="Yes, Delete"
+        type="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

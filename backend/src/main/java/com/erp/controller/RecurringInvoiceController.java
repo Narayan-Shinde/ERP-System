@@ -168,15 +168,29 @@ public class RecurringInvoiceController {
 
     private LocalDate calculateNextRunDate(RecurringInvoice ri, LocalDate from) {
         if (ri.getFrequency() == null) return from.plusMonths(1);
-        return switch (ri.getFrequency()) {
-            case "DAILY"     -> from.plusDays(1);
-            case "WEEKLY"    -> from.plusWeeks(1);
-            case "MONTHLY"   -> from.plusMonths(1).withDayOfMonth(
-                                    Math.min(ri.getDayOfMonth(), from.plusMonths(1).lengthOfMonth()));
-            case "QUARTERLY" -> from.plusMonths(3);
-            case "YEARLY"    -> from.plusYears(1);
-            default          -> from.plusMonths(1);
-        };
+        LocalDate result;
+        switch (ri.getFrequency()) {
+            case "DAILY":
+                result = from.plusDays(1);
+                break;
+            case "WEEKLY":
+                result = from.plusWeeks(1);
+                break;
+            case "MONTHLY":
+                result = from.plusMonths(1).withDayOfMonth(
+                                Math.min(ri.getDayOfMonth(), from.plusMonths(1).lengthOfMonth()));
+                break;
+            case "QUARTERLY":
+                result = from.plusMonths(3);
+                break;
+            case "YEARLY":
+                result = from.plusYears(1);
+                break;
+            default:
+                result = from.plusMonths(1);
+                break;
+        }
+        return result;
     }
 
     // ── Auto-run recurring invoices every day at 7 AM ───────────────────
