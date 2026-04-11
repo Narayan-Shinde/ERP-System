@@ -48,6 +48,7 @@ export default function InventoryPage() {
   const [showModal, setShowModal]   = useState(null);
   const [form, setForm]             = useState({unit:'Nos',gstRate:18,reorderLevel:10});
   const [activeFormTab, setActiveFormTab] = useState('basic');
+  const [autoFilledHsn, setAutoFilledHsn] = useState(null); // HSN auto-filled from item name
 
   // ── Confirm Modals ──
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
@@ -107,32 +108,43 @@ export default function InventoryPage() {
     loadExpiring();
   }, []);
 
-  // ─────────────── HSN AUTO-SUGGEST FROM BACKEND ───────────────
+  // ─────────────── HSN AUTO-SUGGEST FROM BACKEND (HSN_SAC.json) ───────────────
   const hsnTimeoutRef = useRef(null);
   const handleItemNameChange = (e) => {
     const name = e.target.value;
-    setForm({...form, itemName: name});
+    setForm(f => ({...f, itemName: name}));
 
-    // Clear previous timeout
+    if (!name.trim()) {
+      setAutoFilledHsn(null);
+      return;
+    }
+
     if (hsnTimeoutRef.current) clearTimeout(hsnTimeoutRef.current);
 
-    // Debounce backend call
-    if (name.trim().length >= 3) {
+    if (name.trim().length >= 2) {
       hsnTimeoutRef.current = setTimeout(async () => {
         try {
           const response = await suggestHsn(name);
-          if (response.data && response.data.hsnCode) {
+          // API returns array of suggestions
+          const list = Array.isArray(response.data) ? response.data : [];
+          if (list.length > 0) {
+            const best = list[0];
             setForm(f => ({
               ...f,
-              hsnCode: response.data.hsnCode,
-              gstRate: response.data.gstRate,
-              hsnDescription: response.data.description
+              hsnCode: best.hsnCode,
+              gstRate: best.gstRate,
+              hsnDescription: best.description
             }));
+            setAutoFilledHsn({
+              hsnCode: best.hsnCode,
+              gstRate: best.gstRate,
+              description: best.description || ''
+            });
           }
         } catch (err) {
-          // Silent fail - user can manually enter
+          // silent fail
         }
-      }, 500);
+      }, 300);
     }
   };
 
@@ -457,6 +469,7 @@ export default function InventoryPage() {
               <button className="btn btn-primary" onClick={()=>{
                 setForm({unit:'Nos',gstRate:18,reorderLevel:10});
                 setActiveFormTab('basic');
+                setAutoFilledHsn(null);
                 setShowModal('item');
               }}>+ Add Item</button>
             </div>
@@ -554,6 +567,8 @@ export default function InventoryPage() {
                                 onClick={()=>{
                                   setForm({...i,openingStock:i.currentStock,_imagePreview:i.imageBase64?`data:${i.imageMimeType||'image/jpeg'};base64,${i.imageBase64}`:null});
                                   setActiveFormTab('basic');
+                                  // Show existing HSN in HsnAutoComplete
+                                  setAutoFilledHsn(i.hsnCode ? {hsnCode: i.hsnCode, gstRate: i.gstRate||0, description: ''} : null);
                                   setShowModal('item');
                                 }}>✏️ Edit</button>
                               <button className="btn btn-outline" style={{padding:'3px 7px',fontSize:10,borderColor:'#7c3aed',color:'#7c3aed'}}
@@ -811,6 +826,7 @@ export default function InventoryPage() {
                     onGstRateChange={(gstRate) => setForm({...form, gstRate})}
                     placeholder="Type item name to search HSN..."
                     showGstRate={true}
+                    autoFilledHsn={autoFilledHsn}
                   />
                   <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
                     💡 Item name type करा - exact 8-digit HSN code auto-fill होईल

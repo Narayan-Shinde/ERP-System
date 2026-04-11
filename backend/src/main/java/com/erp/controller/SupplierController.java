@@ -96,27 +96,49 @@ public class SupplierController {
                 }
             }
 
-            // Returns
+            // Returns — LinkedHashMap वापरतो कारण Map.of immutable असतो
             returnRepo.findBySupplierId(id).stream()
                 .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                 .forEach(ret -> {
-                    rows.add(Map.of(
-                        "date",      ret.getReturnDate() != null ? ret.getReturnDate() : "—",
-                        "type",      "RETURN",
-                        "reference", ret.getReturnNumber() != null ? ret.getReturnNumber() : "—",
-                        "narration", "Purchase Return",
-                        "debit",     ret.getGrandTotal(),
-                        "credit",    0.0,
-                        "balance",   0.0   // will re-sort
-                    ));
+                    Map<String, Object> retRow = new LinkedHashMap<>();
+                    retRow.put("date",      ret.getReturnDate() != null ? ret.getReturnDate() : "—");
+                    retRow.put("type",      "RETURN");
+                    retRow.put("reference", ret.getReturnNumber() != null ? ret.getReturnNumber() : "—");
+                    retRow.put("narration", "Purchase Return");
+                    retRow.put("debit",     ret.getGrandTotal());
+                    retRow.put("credit",    0.0);
+                    retRow.put("balance",   0.0); // sort नंतर recalculate होईल
+                    rows.add(retRow);
                 });
 
+            // Sort by date — Opening नेहमी पहिला
             rows.sort((a, b) -> {
                 String da = String.valueOf(a.get("date")), db = String.valueOf(b.get("date"));
                 if ("Opening".equals(da)) return -1;
                 if ("Opening".equals(db)) return 1;
                 return da.compareTo(db);
             });
+
+            // Sort नंतर सर्व rows चा balance sequence मध्ये recalculate
+            double runningBalance = supp.getOpeningBalance();
+            for (Map<String, Object> row : rows) {
+                String type = (String) row.get("type");
+                if ("OPENING".equals(type)) {
+                    runningBalance = supp.getOpeningBalance();
+                    row.put("balance", runningBalance);
+                } else if ("INVOICE".equals(type)) {
+                    runningBalance += (Double) row.get("credit");
+                    row.put("balance", runningBalance);
+                } else if ("PAYMENT".equals(type)) {
+                    runningBalance -= (Double) row.get("debit");
+                    row.put("balance", runningBalance);
+                } else if ("RETURN".equals(type)) {
+                    // Purchase Return — supplier कडून माल परत, आपले देणे कमी होते
+                    runningBalance -= (Double) row.get("debit");
+                    row.put("balance", runningBalance);
+                }
+            }
+            running = runningBalance;
 
             double totalDebit  = rows.stream().mapToDouble(r -> (Double) r.get("debit")).sum();
             double totalCredit = rows.stream().mapToDouble(r -> (Double) r.get("credit")).sum();

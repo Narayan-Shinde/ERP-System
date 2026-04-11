@@ -63,6 +63,24 @@ public class BankReconciliationController {
     }
 
     // Reconcile an entry with a voucher/invoice
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateEntry(@PathVariable String id, @RequestBody BankStatement entry) {
+        return statementRepo.findById(id).map(existing -> {
+            entry.setId(id);
+            // reconciliation status preserve करतो
+            if (entry.getReconciliationStatus() == null)
+                entry.setReconciliationStatus(existing.getReconciliationStatus());
+            return ResponseEntity.ok(statementRepo.save(entry));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteEntry(@PathVariable String id) {
+        if (!statementRepo.existsById(id)) return ResponseEntity.notFound().build();
+        statementRepo.deleteById(id);
+        return ResponseEntity.ok(java.util.Map.of("message", "Deleted"));
+    }
+
     @PutMapping("/{id}/reconcile")
     @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
     public ResponseEntity<?> reconcile(@PathVariable String id,

@@ -111,6 +111,20 @@ public class SalesExtraController {
         return ResponseEntity.ok(returnRepo.save(sr));
     }
 
+    @DeleteMapping("/returns/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteReturn(@PathVariable String id) {
+        return returnRepo.findById(id).map(ret -> {
+            // फक्त PENDING returns delete होतात
+            if ("APPROVED".equals(ret.getStatus()) || "COMPLETED".equals(ret.getStatus())) {
+                return ResponseEntity.badRequest().body(
+                    java.util.Map.of("error", "Approved/Completed return delete करता येत नाही"));
+            }
+            returnRepo.deleteById(id);
+            return ResponseEntity.ok(java.util.Map.of("message", "Return deleted"));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
     @PutMapping("/returns/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
     public ResponseEntity<SalesReturn> updateReturn(@PathVariable String id, @RequestBody SalesReturn sr) {

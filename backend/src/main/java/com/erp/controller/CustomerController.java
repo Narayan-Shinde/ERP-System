@@ -100,12 +100,11 @@ public class CustomerController {
                 }
             }
 
-            // Returns
+            // Returns — balance 0 ठेवतो, sort नंतर recalculate होईल
             List<SalesReturn> returns = returnRepo.findByCustomerId(id).stream()
                 .filter(r -> "APPROVED".equals(r.getStatus()) || "COMPLETED".equals(r.getStatus()))
                 .collect(Collectors.toList());
             for (SalesReturn ret : returns) {
-                running -= ret.getGrandTotal();
                 Map<String, Object> retRow = new LinkedHashMap<>();
                 retRow.put("date",      ret.getReturnDate());
                 retRow.put("type",      "RETURN");
@@ -113,17 +112,38 @@ public class CustomerController {
                 retRow.put("narration", "Sales Return");
                 retRow.put("debit",     0.0);
                 retRow.put("credit",    ret.getGrandTotal());
-                retRow.put("balance",   running);
+                retRow.put("balance",   0.0); // sort नंतर recalculate
                 rows.add(retRow);
             }
 
-            // Sort by date
+            // Sort by date — Opening नेहमी पहिला
             rows.sort((a, b) -> {
                 String da = String.valueOf(a.get("date")), db = String.valueOf(b.get("date"));
                 if ("Opening".equals(da)) return -1;
                 if ("Opening".equals(db)) return 1;
                 return da.compareTo(db);
             });
+
+            // Sort नंतर सर्व rows चा balance sequence मध्ये recalculate
+            double runningBalance = cust.getOpeningBalance();
+            for (Map<String, Object> row : rows) {
+                String type = (String) row.get("type");
+                if ("OPENING".equals(type)) {
+                    runningBalance = cust.getOpeningBalance();
+                    row.put("balance", runningBalance);
+                } else if ("INVOICE".equals(type)) {
+                    runningBalance += (Double) row.get("debit");
+                    row.put("balance", runningBalance);
+                } else if ("PAYMENT".equals(type)) {
+                    runningBalance -= (Double) row.get("credit");
+                    row.put("balance", runningBalance);
+                } else if ("RETURN".equals(type)) {
+                    // Sales Return — customer कडून माल परत, त्यांचे देणे कमी होते
+                    runningBalance -= (Double) row.get("credit");
+                    row.put("balance", runningBalance);
+                }
+            }
+            running = runningBalance;
 
             // Summary
             double totalDebit  = rows.stream().mapToDouble(r -> (Double) r.get("debit")).sum();

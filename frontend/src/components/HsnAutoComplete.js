@@ -18,7 +18,9 @@ export default function HsnAutoComplete({
   placeholder = "Search by item name or HSN code...",
   className = "",
   disabled = false,
-  showGstRate = true
+  showGstRate = true,
+  // New: parent can push an auto-filled HSN object {hsnCode, description, gstRate}
+  autoFilledHsn = null
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -28,9 +30,26 @@ export default function HsnAutoComplete({
   const dropdownRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  // Load HSN details if value is provided
+  // When parent auto-fills HSN (from item name), update display
   useEffect(() => {
-    if (value && !selectedHsn) {
+    if (autoFilledHsn && autoFilledHsn.hsnCode) {
+      setSelectedHsn(autoFilledHsn);
+      setSearchTerm(`${autoFilledHsn.hsnCode}${autoFilledHsn.description ? ' - ' + autoFilledHsn.description : ''}`);
+      setShowDropdown(false);
+    }
+  }, [autoFilledHsn]);
+
+  // Reset when value is cleared from outside
+  useEffect(() => {
+    if (!value && !autoFilledHsn) {
+      setSearchTerm('');
+      setSelectedHsn(null);
+    }
+  }, [value, autoFilledHsn]);
+
+  // Load HSN details if value is provided (edit mode)
+  useEffect(() => {
+    if (value && !selectedHsn && !autoFilledHsn) {
       loadHsnDetails(value);
     }
   }, [value]);
@@ -50,39 +69,31 @@ export default function HsnAutoComplete({
     try {
       const response = await getHsnGstRate(hsnCode);
       if (response.data && response.data.valid) {
-        setSelectedHsn({
-          hsnCode: hsnCode,
-          gstRate: response.data.gstRate
-        });
+        setSelectedHsn({ hsnCode, gstRate: response.data.gstRate });
       }
     } catch (err) {
-      // Silently fail - HSN might not be in database yet
+      setSelectedHsn({ hsnCode, gstRate: 0 });
     }
   };
 
-  // Search HSN codes
+  // Search HSN codes from backend (HSN_SAC.json via API)
   const searchHsnCodes = useCallback(async (term) => {
     if (!term || term.length < 2) {
       setSuggestions([]);
       return;
     }
-
     setLoading(true);
     try {
-      // Try searching by item name first
-      let response = await searchHsn(term, 10);
-      let results = response.data || [];
-
-      // If no results, try auto-complete by HSN code
-      if (results.length === 0 && /^\d+$/.test(term)) {
+      let response;
+      if (/^\d+$/.test(term)) {
         response = await autoCompleteHsn(term, 10);
-        results = response.data || [];
+      } else {
+        response = await searchHsn(term, 10);
       }
-
+      const results = Array.isArray(response.data) ? response.data : [];
       setSuggestions(results);
       setShowDropdown(results.length > 0);
     } catch (err) {
-      toast.error('Failed to search HSN codes');
       console.error('HSN search error:', err);
     } finally {
       setLoading(false);
@@ -127,17 +138,12 @@ export default function HsnAutoComplete({
         try {
           const response = await getHsnGstRate(code);
           if (response.data && response.data.valid) {
-            handleSelectHsn({
-              hsnCode: code,
-              description: 'Manual entry',
-              gstRate: response.data.gstRate
-            });
+            handleSelectHsn({ hsnCode: code, description: 'Manual entry', gstRate: response.data.gstRate });
           } else {
-            toast.warning('HSN code not found in database');
-            onChange(code); // Still allow manual entry
+            onChange(code);
           }
         } catch (err) {
-          onChange(code); // Allow manual entry even if validation fails
+          onChange(code);
         }
       }
     }

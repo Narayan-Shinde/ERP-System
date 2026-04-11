@@ -812,7 +812,41 @@ export default function SupplierPage() {
         <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:760,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
           <div className="modal-header" style={{flexShrink:0}}>
             <h3 style={{margin:0}}>📋 Purchase History — {historySupplier?.supplierName}</h3>
-            <button className="modal-close" onClick={()=>setShowModal(null)}>×</button>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <button className="btn btn-outline" style={{fontSize:12,padding:'4px 12px'}} onClick={()=>{
+                const w=window.open('','_blank');
+                const invoices=historyData?.invoices||[];
+                const totalPurchased=historyData?.totalPurchased||0;
+                const totalPaid=historyData?.totalPaid||0;
+                const balance=totalPurchased-totalPaid;
+                w.document.write(`<!DOCTYPE html><html><head><title>Purchase History</title>
+                <style>body{font-family:Arial,sans-serif;padding:20px;font-size:13px}
+                h2{color:#1a4f8a}table{width:100%;border-collapse:collapse;margin-top:12px}
+                th{background:#1a4f8a;color:#fff;padding:7px 10px;text-align:left;font-size:12px}
+                td{padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}
+                .cards{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
+                .card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;min-width:130px}
+                .card-label{font-size:10px;color:#94a3b8}.card-value{font-size:16px;font-weight:800}
+                .text-right{text-align:right}.total-row td{font-weight:700;background:#f1f5f9}
+                @media print{button{display:none}}</style></head><body>
+                <h2>Purchase History — ${historySupplier?.supplierName}</h2>
+                <div>Code: ${historySupplier?.supplierCode} | Phone: ${historySupplier?.phone||'—'} | GSTIN: ${historySupplier?.gstin||'—'}</div>
+                <div class="cards">
+                  <div class="card"><div class="card-label">Total Invoices</div><div class="card-value" style="color:#2563eb">${fmtN(historyData?.count||0)}</div></div>
+                  <div class="card"><div class="card-label">Total Purchased</div><div class="card-value" style="color:#dc2626">${fmt(totalPurchased)}</div></div>
+                  <div class="card"><div class="card-label">Total Paid</div><div class="card-value" style="color:#16a34a">${fmt(totalPaid)}</div></div>
+                  <div class="card"><div class="card-label">Balance</div><div class="card-value" style="color:#d97706">${fmt(balance)}</div></div>
+                </div>
+                <table><thead><tr><th>#</th><th>Invoice No.</th><th>Date</th><th>Supplier Inv</th><th class="text-right">Amount</th><th class="text-right">Paid</th><th class="text-right">Balance</th><th>Status</th></tr></thead>
+                <tbody>${invoices.map((inv,i)=>`<tr><td>${i+1}</td><td>${inv.invoiceNumber||'—'}</td><td>${inv.invoiceDate||'—'}</td><td>${inv.supplierInvoiceNumber||'—'}</td><td class="text-right">${fmt(inv.grandTotal)}</td><td class="text-right">${fmt(inv.paidAmount||0)}</td><td class="text-right">${fmt(inv.balanceDue||0)}</td><td>${inv.paymentStatus||'—'}</td></tr>`).join('')}
+                </tbody><tfoot><tr class="total-row"><td colspan="4">Total</td><td class="text-right">${fmt(totalPurchased)}</td><td class="text-right">${fmt(totalPaid)}</td><td class="text-right">${fmt(balance)}</td><td></td></tr></tfoot>
+                </table>
+                <div style="margin-top:16px;font-size:11px;color:#94a3b8">Generated: ${new Date().toLocaleString('en-IN')} | ERP Accounting</div>
+                </body></html>`);
+                w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+              }}>🖨️ Print</button>
+              <button className="modal-close" onClick={()=>setShowModal(null)}>×</button>
+            </div>
           </div>
           <div style={{overflowY:'auto',flex:1}}>
             <div className="modal-body">

@@ -3,7 +3,7 @@ import {
   getBanks, getCustomers, addCustomer, updateCustomer, deleteCustomer,
   getSalesInvoices, addSalesInvoice, updateSalesInvoice, cancelSalesInvoice, recordSalesPayment,
   getSalesOrders, addSalesOrder, updateSalesOrder, deleteSalesOrder,
-  getSalesReturns, addSalesReturn, updateSalesReturn,
+  getSalesReturns, addSalesReturn, updateSalesReturn, deleteSalesReturn,
   getItems, getSalesRegister, convertToInvoice, getGstConfigurations,
   suggestHsn, calculateInvoice
 } from '../services/api';
@@ -43,6 +43,7 @@ export default function SalesPage() {
   const [invItems, setInvItems]   = useState([{itemId:'',itemName:'',hsnCode:'',quantity:1,unit:'Nos',rate:0,discount:0,gstRate:18,isCustom:false}]);
   const [calculatedTotals, setCalculatedTotals] = useState(null);
   const [editReturnId, setEditReturnId] = useState(null);
+  const [confirmDeleteReturn, setConfirmDeleteReturn] = useState(null);
 
   const [payModal, setPayModal]   = useState(null);
   const [payAmt,   setPayAmt]     = useState('');
@@ -339,6 +340,19 @@ export default function SalesPage() {
     catch(e){toast.error(e.response?.data?.error||'Convert failed');}
   };
 
+  // ─── DELETE RETURN ───
+  const deleteReturn = async () => {
+    try {
+      await deleteSalesReturn(confirmDeleteReturn.id);
+      toast.success('Return deleted!');
+      setConfirmDeleteReturn(null);
+      fetchAll();
+    } catch(e) {
+      toast.error(e.response?.data?.error || 'Delete failed');
+      setConfirmDeleteReturn(null);
+    }
+  };
+
   // ── Return ──
   const saveReturn = async () => {
     if(!form.originalInvoiceId){toast.error('Select invoice!');return;}
@@ -548,6 +562,10 @@ export default function SalesPage() {
                         {r.status==='APPROVED'&&isAdmin&&(
                           <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#2563eb',borderColor:'#93c5fd'}}
                             onClick={async()=>{try{await updateSalesReturn(r.id,{...r,status:'COMPLETED'});toast.success('Completed!');fetchAll();}catch{toast.error('Failed');}}}>🏁 Complete</button>
+                        )}
+                        {r.status==='PENDING'&&isAdmin&&(
+                          <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#dc2626',borderColor:'#fca5a5'}}
+                            onClick={()=>setConfirmDeleteReturn(r)}>🗑️</button>
                         )}
                       </div>
                     </td>
@@ -1106,6 +1124,11 @@ export default function SalesPage() {
     </div>
 
     {/* ConfirmModals */}
+    <ConfirmModal open={!!confirmDeleteReturn} title="Delete Sales Return?" type="danger"
+      message="हा return कायमचा delete होईल."
+      details={confirmDeleteReturn?`${confirmDeleteReturn.returnNumber||''} — ${confirmDeleteReturn.customerName||''}`:''}
+      confirmLabel="Yes, Delete" onConfirm={deleteReturn} onCancel={()=>setConfirmDeleteReturn(null)}/>
+
     <ConfirmModal open={!!confirmCancelInv} title="Cancel Invoice?"
       message="Invoice cancel झाल्यावर stock restore होईल व accounting reverse होईल."
       details={confirmCancelInv?`Invoice: ${confirmCancelInv.invoiceNumber} — ${fmt(confirmCancelInv.grandTotal||0)}`:''}

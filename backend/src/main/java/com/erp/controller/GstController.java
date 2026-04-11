@@ -54,6 +54,23 @@ public class GstController {
         return gstConfigRepo.save(config);
     }
 
+    @PutMapping("/configurations/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateConfig(@PathVariable String id, @RequestBody GstConfiguration config) {
+        return gstConfigRepo.findById(id).map(existing -> {
+            config.setId(id);
+            return ResponseEntity.ok(gstConfigRepo.save(config));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/configurations/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteConfig(@PathVariable String id) {
+        if (!gstConfigRepo.existsById(id)) return ResponseEntity.notFound().build();
+        gstConfigRepo.deleteById(id);
+        return ResponseEntity.ok(Map.of("message", "Deleted"));
+    }
+
     // ================= GSTR1 (MAIN) =================
 
     @GetMapping("/gstr1")

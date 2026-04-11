@@ -1,8 +1,8 @@
 package com.erp.service;
 
 import com.erp.model.accounting.AccountingVoucher;
-import com.erp.model..LedgerAccount;
-import com.erp.model.ledger.LedgerTransaction;
+import com.erp.model.LedgerAccount;
+import com.erp.model.LedgerTransaction;
 import com.erp.model.PurchaseInvoice;
 import com.erp.model.SalesInvoice;
 import com.erp.model.BankAccount;

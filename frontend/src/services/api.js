@@ -80,6 +80,7 @@ export const deleteSalesOrder       = id        => API.delete(`/sales/orders/${i
 export const getSalesReturns        = ()        => API.get('/sales/returns');
 export const addSalesReturn         = d         => API.post('/sales/returns', d);
 export const updateSalesReturn      = (id,d)    => API.put(`/sales/returns/${id}`, d);
+export const deleteSalesReturn      = id        => API.delete(`/sales/returns/${id}`);
 export const getOutstandingReport   = ()        => API.get('/sales/report/outstanding');
 export const getSalesRegister       = p         => API.get('/sales/report/register', {params:p});
 
@@ -130,9 +131,10 @@ export const getHsnGstRate     = code    => API.get(`/hsn/gst-rate/${code}`);
 export const suggestHsnByCategory = (itemType, description) => API.post('/hsn/suggest', { itemType, description });
 export const getAllHsn         = ()      => API.get('/hsn');
 
-export const getGstConfigurations = ()      => API.get('/gst/configurations');
-export const addGstConfiguration  = d       => API.post('/gst/configurations', d);
-export const deleteGstConfiguration = id    => API.delete(`/gst/configurations/${id}`);
+export const getGstConfigurations    = ()      => API.get('/gst/configurations');
+export const addGstConfiguration     = d       => API.post('/gst/configurations', d);
+export const updateGstConfiguration  = (id,d)  => API.put(`/gst/configurations/${id}`, d);
+export const deleteGstConfiguration  = id      => API.delete(`/gst/configurations/${id}`);
 export const getGstLiability    = (f,t)   => API.get('/reports/gst-liability', {params:{fromDate:f,toDate:t}});
 export const getGSTR3B            = (f,t)   => API.get('/gst/gstr3b', {params:{fromDate:f,toDate:t}})
 export const generateGSTR3B       = (f,t)   => API.get('/gst/gstr3b', {params:{fromDate:f,toDate:t}})  // alias;
@@ -241,6 +243,7 @@ export const runRecurringNow        = id        => API.post(`/sales/recurring/${
 // ── Bank Reconciliation ────────────────────────────────────────────
 export const getBankStatements      = p         => API.get('/accounting/bank-statements', {params:p});
 export const addBankStatement       = d         => API.post('/accounting/bank-statements', d);
+export const updateBankStatement    = (id,d)    => API.put(`/accounting/bank-statements/${id}`, d);
 export const deleteBankStatement    = id        => API.delete(`/accounting/bank-statements/${id}`);
 export const reconcileEntry         = (id,p)    => API.put(`/accounting/bank-statements/${id}/reconcile`, null, {params:p});
 export const getUnreconciledEntries = ()        => API.get('/accounting/bank-statements/unreconciled');

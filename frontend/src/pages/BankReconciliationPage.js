@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  getBanks, getBankStatements, addBankStatement, deleteBankStatement,
+  getBanks, getBankStatements, addBankStatement, updateBankStatement, deleteBankStatement,
   reconcileEntry, getUnreconciledEntries
 } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
@@ -23,6 +23,7 @@ export default function BankReconciliationPage() {
   const [loading,      setLoading]      = useState(false);
   const [summary,      setSummary]      = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [editEntry,     setEditEntry]     = useState(null); // entry being edited
 
   useEffect(() => { fetchBanks(); }, []);
   useEffect(() => { if(selectedBank) fetchData(); }, [selectedBank, fromDate, toDate, tab]);
@@ -59,11 +60,18 @@ export default function BankReconciliationPage() {
     if(!form.transactionDate){ toast.error('Date required'); return; }
     if(!form.debitAmount && !form.creditAmount){ toast.error('Debit ya Credit amount enter kara'); return; }
     try {
-      await addBankStatement({...form, bankAccountId:selectedBank,
-        bankAccountName: banks.find(b=>b.id===selectedBank)?.bankName||'',
-        reconciliationStatus:'UNMATCHED'});
-      toast.success('✅ Entry added');
-      setAddModal(false);
+      if (editEntry) {
+        await updateBankStatement(editEntry.id, {...form,
+          bankAccountId: selectedBank,
+          bankAccountName: banks.find(b=>b.id===selectedBank)?.bankName||''});
+        toast.success('✅ Entry updated');
+      } else {
+        await addBankStatement({...form, bankAccountId:selectedBank,
+          bankAccountName: banks.find(b=>b.id===selectedBank)?.bankName||'',
+          reconciliationStatus:'UNMATCHED'});
+        toast.success('✅ Entry added');
+      }
+      setAddModal(false); setEditEntry(null);
       setForm({transactionDate:today()});
       fetchData();
     } catch(e){ toast.error('Failed'); }
@@ -104,7 +112,7 @@ export default function BankReconciliationPage() {
             {banks.map(b=><option key={b.id} value={b.id}>{b.bankName} — {b.accountNumber}</option>)}
           </select>
           {selectedBank && (
-            <button className="btn btn-primary" onClick={()=>setAddModal(true)}>+ Add Entry</button>
+            <button className="btn btn-primary" onClick={()=>{setEditEntry(null);setForm({transactionDate:today()});setAddModal(true);}}>+ Add Entry</button>
           )}
         </div>
       </div>
@@ -206,6 +214,21 @@ export default function BankReconciliationPage() {
                                 🔗 Match
                               </button>
                             )}
+                            <button className="btn btn-sm btn-outline" style={{color:'#2563eb',borderColor:'#2563eb',marginLeft:6}}
+                              onClick={()=>{
+                                setEditEntry(entry);
+                                const isDebit = (entry.debitAmount||0) > 0;
+                                setForm({
+                                  transactionDate: entry.transactionDate,
+                                  description: entry.description||'',
+                                  referenceNumber: entry.referenceNumber||'',
+                                  _type: isDebit ? 'debit' : 'credit',
+                                  debitAmount: entry.debitAmount||0,
+                                  creditAmount: entry.creditAmount||0,
+                                  balance: entry.balance||0,
+                                });
+                                setAddModal(true);
+                              }} title="Edit entry">✏️</button>
                             <button className="btn btn-sm btn-outline" style={{color:'#dc2626',borderColor:'#dc2626',marginLeft:6}} onClick={()=>setConfirmDelete(entry)} title="Delete entry">🗑️</button>
                           </td>
                         </tr>
@@ -224,8 +247,8 @@ export default function BankReconciliationPage() {
         <div className="modal-overlay" onClick={()=>setAddModal(false)}>
           <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
             <div className="modal-header">
-              <h3>+ Add Bank Statement Entry</h3>
-              <button className="modal-close" onClick={()=>setAddModal(false)}>×</button>
+              <h3>{editEntry ? "✏️ Edit Bank Entry" : "+ Add Bank Statement Entry"}</h3>
+              <button className="modal-close" onClick={()=>{setAddModal(false);setEditEntry(null);}}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -268,8 +291,8 @@ export default function BankReconciliationPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={()=>setAddModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveEntry}>💾 Save Entry</button>
+              <button className="btn btn-outline" onClick={()=>{setAddModal(false);setEditEntry(null);}}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveEntry}>{editEntry ? "💾 Update Entry" : "💾 Save Entry"}</button>
             </div>
           </div>
         </div>

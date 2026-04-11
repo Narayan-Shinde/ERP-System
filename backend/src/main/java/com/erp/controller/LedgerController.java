@@ -1,7 +1,7 @@
 package com.erp.controller;
 
-import com.erp.model.ledger.LedgerAccount;
-import com.erp.model.ledger.LedgerTransaction;
+import com.erp.model.LedgerAccount;
+import com.erp.model.LedgerTransaction;
 import com.erp.repository.LedgerAccountRepository;
 import com.erp.repository.LedgerTransactionRepository;
 import org.springframework.beans.factory.annotation.Autowired;

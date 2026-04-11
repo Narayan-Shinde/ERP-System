@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getGSTR3B, getITCReport, getGstConfigurations, addGstConfiguration, deleteGstConfiguration, getGstLiability, getGSTR1, getCompanySettings } from '../services/api';
+import { getGSTR3B, getITCReport, getGstConfigurations, addGstConfiguration, updateGstConfiguration, deleteGstConfiguration, getGstLiability, getGSTR1, getCompanySettings } from '../services/api';
 import { printReport } from '../utils/printUtils';
 import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
@@ -22,6 +22,7 @@ export default function GSTPage() {
   const [company, setCompany]  = useState({});
   const [gstr1Tab, setG1Tab]   = useState('b2b');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [editConfigId,  setEditConfigId]  = useState(null);
 
   useEffect(() => {
     getCompanySettings().then(r => setCompany(r.data||{})).catch(()=>{});
@@ -64,8 +65,14 @@ export default function GSTPage() {
     if (!form.hsnCode?.trim()) { toast.error('HSN Code required'); return; }
     if (form.gstRate === undefined) { toast.error('GST Rate required'); return; }
     try {
-      await addGstConfiguration({...form, active:true});
-      toast.success('GST config saved!'); setModal(false); setForm({});
+      if (editConfigId) {
+        await updateGstConfiguration(editConfigId, {...form, active:true});
+        toast.success('GST config updated!');
+      } else {
+        await addGstConfiguration({...form, active:true});
+        toast.success('GST config saved!');
+      }
+      setModal(false); setForm({}); setEditConfigId(null);
       getGstConfigurations().then(r=>setConfigs(r.data||[]));
     } catch { toast.error('Failed'); }
   };
@@ -442,7 +449,7 @@ export default function GSTPage() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">⚙️ GST Rate Configuration</span>
-            <button className="btn btn-primary" onClick={()=>{setForm({gstRate:18,taxType:'GOODS'});setModal(true);}}>+ Add HSN Config</button>
+            <button className="btn btn-primary" onClick={()=>{setForm({gstRate:18,taxType:'GOODS'});setEditConfigId(null);setModal(true);}}>+ Add HSN Config</button>
           </div>
           <div className="card-body">
             {configs.length>0 ? (
@@ -461,7 +468,11 @@ export default function GSTPage() {
                         <td><span className="badge badge-secondary">{c.taxType||'GOODS'}</span></td>
                         <td><span className={`badge ${c.active?'badge-success':'badge-danger'}`}>{c.active?'Active':'Inactive'}</span></td>
                         <td>
-                          <button className="btn btn-sm btn-outline" style={{color:'#dc2626',borderColor:'#dc2626'}} onClick={()=>setConfirmDelete(c)} title="Delete config">🗑️</button>
+                          <div style={{display:'flex',gap:6}}>
+                            <button className="btn btn-sm btn-outline" style={{color:'#2563eb',borderColor:'#2563eb'}}
+                              onClick={()=>{setForm({...c});setEditConfigId(c.id);setModal(true);}} title="Edit config">✏️</button>
+                            <button className="btn btn-sm btn-outline" style={{color:'#dc2626',borderColor:'#dc2626'}} onClick={()=>setConfirmDelete(c)} title="Delete config">🗑️</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -481,7 +492,7 @@ export default function GSTPage() {
       {showModal && (
         <div className="modal-overlay" onClick={()=>setModal(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-header"><h3>Add GST Configuration</h3><button className="modal-close" onClick={()=>setModal(false)}>×</button></div>
+            <div className="modal-header"><h3>{editConfigId ? "✏️ Edit GST Configuration" : "➕ Add GST Configuration"}</h3><button className="modal-close" onClick={()=>setModal(false)}>×</button></div>
             <div className="modal-body">
               <div className="form-grid">
                 <div className="form-group"><label>HSN/SAC Code *</label><input value={form.hsnCode||''} onChange={e=>setForm({...form,hsnCode:e.target.value})} placeholder="e.g. 8471, 9984"/></div>

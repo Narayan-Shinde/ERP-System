@@ -1,214 +1,153 @@
 package com.erp.service;
 
-import com.erp.model.gst.HsnMaster;
-import com.erp.repository.HsnMasterRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
+import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * HSN API Service for auto-suggest and lookup of HSN codes
- * Integrates with GST Portal API and local HSN database
+ * HSN API Service - directly reads HSN_SAC.json (21,790 codes)
+ * MongoDB वर depend नाही — JSON file in-memory load होते
  */
 @Slf4j
 @Service
 public class HsnApiService {
 
-    @Autowired
-    private HsnMasterRepository hsnRepo;
-    
-    private final RestTemplate restTemplate = new RestTemplate();
-    
-    // GST Portal API endpoints (mock - replace with actual URLs)
-    private static final String GST_HSN_SEARCH_API = "https://api.gst.gov.in/hsn/search";
-    private static final String GST_HSN_VALIDATE_API = "https://api.gst.gov.in/hsn/validate";
-    
-    /**
-     * Search HSN codes by item name/description
-     * Returns best matching 8-digit HSN codes with GST rates
-     */
+    // In-memory list — startup ला एकदाच load होते
+    private final List<HsnEntry> ALL_HSN = new ArrayList<>();
+
+    @PostConstruct
+    public void init() {
+        try {
+            ClassPathResource resource = new ClassPathResource("HSN_SAC.json");
+            if (!resource.exists()) {
+                log.warn("HSN_SAC.json not found in classpath!");
+                return;
+            }
+            ObjectMapper mapper = new ObjectMapper();
+            try (InputStream is = resource.getInputStream()) {
+                JsonNode root = mapper.readTree(is);
+                JsonNode sections = root.get("sections");
+                if (sections != null && sections.isArray()) {
+                    for (JsonNode section : sections) {
+                        JsonNode codes = section.get("codes");
+                        if (codes != null && codes.isArray()) {
+                            for (JsonNode code : codes) {
+                                String hsn  = code.has("hsn")  ? code.get("hsn").asText()  : "";
+                                String desc = code.has("desc") ? code.get("desc").asText() : "";
+                                double gst  = code.has("gst")  ? code.get("gst").asDouble() : 18.0;
+                                if (!hsn.isEmpty()) {
+                                    ALL_HSN.add(new HsnEntry(hsn, desc.toUpperCase(), gst));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            log.info("HSN_SAC.json loaded: {} codes", ALL_HSN.size());
+        } catch (Exception e) {
+            log.error("Failed to load HSN_SAC.json: {}", e.getMessage());
+        }
+    }
+
+    // ─── Item Name वरून best matching HSN शोधतो ───
     public List<HsnSuggestion> searchByItemName(String itemName, int limit) {
-        if (itemName == null || itemName.trim().isEmpty()) {
-            return Collections.emptyList();
+        if (itemName == null || itemName.trim().isEmpty()) return Collections.emptyList();
+
+        String[] words = itemName.trim().toUpperCase().split("\\s+");
+
+        // प्रत्येक entry ला score देतो
+        List<ScoredEntry> scored = new ArrayList<>();
+        for (HsnEntry entry : ALL_HSN) {
+            int score = 0;
+            for (String word : words) {
+                if (word.length() > 1 && entry.desc.contains(word)) {
+                    score += word.length(); // longer word = higher score
+                }
+            }
+            if (score > 0) {
+                // 8-digit codes ला जास्त priority
+                if (entry.hsn.length() == 8) score += 50;
+                else if (entry.hsn.length() == 6) score += 20;
+                else if (entry.hsn.length() == 4) score += 5;
+                scored.add(new ScoredEntry(entry, score));
+            }
         }
-        
-        String searchTerm = itemName.toLowerCase();
-        
-        // Search in local database first
-        List<HsnMaster> matches = hsnRepo.findAll().stream()
-            .filter(hsn -> {
-                String desc = hsn.getDescription() != null ? hsn.getDescription().toLowerCase() : "";
-                String keywords = hsn.getKeywords() != null ? String.join(" ", hsn.getKeywords()).toLowerCase() : "";
-                String code = hsn.getHsnCode() != null ? hsn.getHsnCode() : "";
-                
-                return desc.contains(searchTerm) || 
-                       keywords.contains(searchTerm) || 
-                       searchTerm.contains(desc.substring(0, Math.min(10, desc.length()))) ||
-                       code.equals(searchTerm);
-            })
-            .sorted((a, b) -> {
-                // Prioritize exact matches
-                int aScore = calculateMatchScore(a, searchTerm);
-                int bScore = calculateMatchScore(b, searchTerm);
-                return Integer.compare(bScore, aScore);
-            })
+
+        scored.sort((a, b) -> Integer.compare(b.score, a.score));
+
+        return scored.stream()
             .limit(limit)
-            .collect(Collectors.toList());
-        
-        return matches.stream()
-            .map(this::convertToSuggestion)
+            .map(s -> new HsnSuggestion(s.entry.hsn, s.entry.desc, s.entry.gst, "", ""))
             .collect(Collectors.toList());
     }
-    
-    /**
-     * Get exact HSN code by 8-digit code
-     */
-    public Optional<HsnSuggestion> getByHsnCode(String hsnCode) {
-        return hsnRepo.findByHsnCodeAndActiveTrue(hsnCode)
-            .map(this::convertToSuggestion);
-    }
-    
-    /**
-     * Validate HSN code and return GST rate
-     */
-    public Optional<HsnValidationResult> validateHsnCode(String hsnCode) {
-        return hsnRepo.findByHsnCodeAndActiveTrue(hsnCode)
-            .map(hsn -> new HsnValidationResult(
-                hsn.getHsnCode(),
-                hsn.getGstRate(),
-                hsn.getDescription(),
-                hsn.getCategory(),
-                true
-            ));
-    }
-    
-    /**
-     * Get suggested HSN code based on item category/type
-     * Uses AI-like matching based on common item patterns
-     */
-    public List<HsnSuggestion> getSuggestionsByCategory(String itemType, String itemDescription) {
-        Map<String, List<String>> categoryKeywords = getCategoryKeywordMap();
-        
-        String searchText = (itemType + " " + itemDescription).toLowerCase();
-        
-        // Find matching categories
-        List<String> matchingCategories = categoryKeywords.entrySet().stream()
-            .filter(entry -> entry.getValue().stream()
-                .anyMatch(keyword -> searchText.contains(keyword.toLowerCase())))
-            .map(Map.Entry::getKey)
-            .collect(Collectors.toList());
-        
-        if (matchingCategories.isEmpty()) {
-            return Collections.emptyList();
-        }
-        
-        // Return HSN codes for matching categories
-        return hsnRepo.findAll().stream()
-            .filter(hsn -> matchingCategories.contains(hsn.getCategory()))
-            .limit(10)
-            .map(this::convertToSuggestion)
-            .collect(Collectors.toList());
-    }
-    
-    /**
-     * Auto-complete HSN code as user types
-     * Returns matching codes starting with input
-     */
+
+    // ─── HSN code prefix वरून autocomplete ───
     public List<HsnSuggestion> autoCompleteHsnCode(String partialCode, int limit) {
-        if (partialCode == null || partialCode.length() < 2) {
-            return Collections.emptyList();
-        }
-        
-        return hsnRepo.findAll().stream()
-            .filter(hsn -> hsn.getHsnCode() != null && 
-                         hsn.getHsnCode().startsWith(partialCode))
-            .sorted(Comparator.comparing(HsnMaster::getHsnCode))
+        if (partialCode == null || partialCode.length() < 2) return Collections.emptyList();
+        return ALL_HSN.stream()
+            .filter(e -> e.hsn.startsWith(partialCode))
+            .sorted(Comparator.comparing(e -> e.hsn))
             .limit(limit)
-            .map(this::convertToSuggestion)
+            .map(e -> new HsnSuggestion(e.hsn, e.desc, e.gst, "", ""))
             .collect(Collectors.toList());
     }
-    
-    /**
-     * Get GST rate for HSN code
-     */
+
+    // ─── Exact HSN code lookup ───
+    public Optional<HsnSuggestion> getByHsnCode(String hsnCode) {
+        return ALL_HSN.stream()
+            .filter(e -> e.hsn.equals(hsnCode))
+            .findFirst()
+            .map(e -> new HsnSuggestion(e.hsn, e.desc, e.gst, "", ""));
+    }
+
+    // ─── Validate HSN code ───
+    public Optional<HsnValidationResult> validateHsnCode(String hsnCode) {
+        return ALL_HSN.stream()
+            .filter(e -> e.hsn.equals(hsnCode))
+            .findFirst()
+            .map(e -> new HsnValidationResult(e.hsn, e.gst, e.desc, "", true));
+    }
+
+    // ─── GST rate for HSN code ───
     public double getGstRateForHsn(String hsnCode) {
-        return hsnRepo.findByHsnCodeAndActiveTrue(hsnCode)
-            .map(HsnMaster::getGstRate)
-            .orElse(18.0); // Default GST rate
+        return ALL_HSN.stream()
+            .filter(e -> e.hsn.equals(hsnCode))
+            .findFirst()
+            .map(e -> e.gst)
+            .orElse(18.0);
     }
-    
-    // ============ Private Helper Methods ============
-    
-    private int calculateMatchScore(HsnMaster hsn, String searchTerm) {
-        int score = 0;
-        String desc = hsn.getDescription() != null ? hsn.getDescription().toLowerCase() : "";
-        String code = hsn.getHsnCode() != null ? hsn.getHsnCode() : "";
-        
-        // Exact code match = highest score
-        if (code.equals(searchTerm)) {
-            score += 100;
+
+    // ─── Category suggestions ───
+    public List<HsnSuggestion> getSuggestionsByCategory(String itemType, String description) {
+        String combined = (itemType + " " + description).trim();
+        return searchByItemName(combined, 10);
+    }
+
+    // ─── Internal classes ───
+    private static class HsnEntry {
+        final String hsn, desc;
+        final double gst;
+        HsnEntry(String hsn, String desc, double gst) {
+            this.hsn = hsn; this.desc = desc; this.gst = gst;
         }
-        // Code starts with search term
-        else if (code.startsWith(searchTerm)) {
-            score += 50;
+    }
+
+    private static class ScoredEntry {
+        final HsnEntry entry;
+        final int score;
+        ScoredEntry(HsnEntry entry, int score) {
+            this.entry = entry; this.score = score;
         }
-        
-        // Description contains search term
-        if (desc.contains(searchTerm)) {
-            score += 30;
-        }
-        
-        // Exact word match in description
-        if (desc.matches(".*\\b" + searchTerm + "\\b.*")) {
-            score += 20;
-        }
-        
-        return score;
     }
-    
-    private HsnSuggestion convertToSuggestion(HsnMaster hsn) {
-        return new HsnSuggestion(
-            hsn.getHsnCode(),
-            hsn.getDescription(),
-            hsn.getGstRate(),
-            hsn.getCategory(),
-            generateRecommendationReason(hsn)
-        );
-    }
-    
-    private String generateRecommendationReason(HsnMaster hsn) {
-        return String.format("HSN %s - %s%% GST - %s", 
-            hsn.getHsnCode(), 
-            hsn.getGstRate(),
-            hsn.getCategory());
-    }
-    
-    private Map<String, List<String>> getCategoryKeywordMap() {
-        Map<String, List<String>> map = new HashMap<>();
-        map.put("Plastics", Arrays.asList("plastic", "bopp", "film", "poly", "pvc", "pet"));
-        map.put("Textiles", Arrays.asList("cloth", "fabric", "cotton", "silk", "wool", "yarn"));
-        map.put("Metals", Arrays.asList("steel", "iron", "copper", "aluminum", "metal"));
-        map.put("Electrical", Arrays.asList("wire", "cable", "electric", "motor", "switch"));
-        map.put("Electronics", Arrays.asList("mobile", "computer", "electronic", "chip", "circuit"));
-        map.put("Chemicals", Arrays.asList("chemical", "acid", "solvent", "paint", "ink"));
-        map.put("Food", Arrays.asList("food", "beverage", "drink", "snack", "edible"));
-        map.put("Furniture", Arrays.asList("furniture", "chair", "table", "wood"));
-        map.put("Paper", Arrays.asList("paper", "cardboard", "print", "stationery"));
-        map.put("Rubber", Arrays.asList("rubber", "tyre", "tube", "belt"));
-        map.put("Machinery", Arrays.asList("machine", "equipment", "tool", "engine"));
-        map.put("Vehicles", Arrays.asList("vehicle", "car", "bike", "truck", "auto"));
-        map.put("Pharmaceuticals", Arrays.asList("medicine", "drug", "tablet", "pharma"));
-        map.put("Cosmetics", Arrays.asList("cosmetic", "beauty", "cream", "lotion", "perfume"));
-        map.put("Glass", Arrays.asList("glass", "mirror", "lens"));
-        return map;
-    }
-    
-    // ============ DTO Classes ============
-    
+
+    // ─── DTO Classes ───
     @lombok.Data
     @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
@@ -219,7 +158,7 @@ public class HsnApiService {
         private String category;
         private String reason;
     }
-    
+
     @lombok.Data
     @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
