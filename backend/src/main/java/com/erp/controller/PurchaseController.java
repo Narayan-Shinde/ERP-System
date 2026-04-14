@@ -226,8 +226,9 @@ public class PurchaseController {
                 : invoiceRepo.findByInvoiceDateBetween(LocalDate.parse(fromDate), LocalDate.parse(toDate));
         else if (supplierId != null) all = invoiceRepo.findBySupplierId(supplierId).stream()
             .filter(i -> !activeOnly || i.isActive()).collect(Collectors.toList());
-        else if (financialYear != null) all = invoiceRepo.findByFinancialYear(financialYear).stream()
-            .filter(i -> !activeOnly || i.isActive()).collect(Collectors.toList());
+        else if (financialYear != null && !"ALL".equalsIgnoreCase(financialYear))
+            all = invoiceRepo.findByFinancialYear(financialYear).stream()
+                .filter(i -> !activeOnly || i.isActive()).collect(Collectors.toList());
         else all = activeOnly ? invoiceRepo.findByActiveTrue() : invoiceRepo.findAll();
         return all;
     }

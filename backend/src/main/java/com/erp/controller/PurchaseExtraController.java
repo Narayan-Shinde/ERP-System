@@ -98,7 +98,7 @@ public class PurchaseExtraController {
 
     @GetMapping("/returns")
     public List<PurchaseReturn> getReturns(@RequestParam(required = false) String financialYear) {
-        if (financialYear != null) return returnRepo.findByFinancialYear(financialYear);
+        if (financialYear != null && !"ALL".equalsIgnoreCase(financialYear)) return returnRepo.findByFinancialYear(financialYear);
         return returnRepo.findAll();
     }
 
@@ -183,6 +183,19 @@ public class PurchaseExtraController {
         return ResponseEntity.ok(saved);
     }
 
+    @DeleteMapping("/returns/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteReturn(@PathVariable String id) {
+        return returnRepo.findById(id).map(ret -> {
+            if ("APPROVED".equals(ret.getStatus()) || "COMPLETED".equals(ret.getStatus())) {
+                return ResponseEntity.badRequest().body(
+                    java.util.Map.of("error", "Approved/Completed return delete करता येत नाही"));
+            }
+            returnRepo.deleteById(id);
+            return ResponseEntity.ok(java.util.Map.of("message", "Return deleted"));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
     @PutMapping("/returns/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
     public ResponseEntity<PurchaseReturn> updateReturn(@PathVariable String id, @RequestBody PurchaseReturn pr) {
@@ -259,8 +272,13 @@ public class PurchaseExtraController {
     }
 
     @GetMapping("/grn")
-    public List<GoodsReceiptNote> getGRNs(@RequestParam(required = false) String supplierId) {
+    public List<GoodsReceiptNote> getGRNs(@RequestParam(required = false) String supplierId,
+                                            @RequestParam(required = false) String financialYear) {
         if (supplierId != null) return grnRepo.findBySupplierId(supplierId);
+        if (financialYear != null)
+            return grnRepo.findAll().stream()
+                .filter(g -> financialYear.equals(g.getFinancialYear()))
+                .collect(java.util.stream.Collectors.toList());
         return grnRepo.findAll();
     }
 
@@ -281,5 +299,13 @@ public class PurchaseExtraController {
             grn.setId(id);
             return ResponseEntity.ok(grnRepo.save(grn));
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/grn/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteGRN(@PathVariable String id) {
+        if (!grnRepo.existsById(id)) return ResponseEntity.notFound().build();
+        grnRepo.deleteById(id);
+        return ResponseEntity.ok(java.util.Map.of("message", "GRN deleted"));
     }
 }

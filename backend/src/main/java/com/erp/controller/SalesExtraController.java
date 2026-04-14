@@ -32,8 +32,10 @@ public class SalesExtraController {
     @Autowired private CustomerRepository customerRepo;
 
     @GetMapping("/orders")
-    public List<SalesOrder> getOrders(@RequestParam(required = false) String status) {
+    public List<SalesOrder> getOrders(@RequestParam(required = false) String status,
+                                        @RequestParam(required = false) String financialYear) {
         if (status != null) return soRepo.findByStatus(status);
+        if (financialYear != null) return soRepo.findByFinancialYear(financialYear);
         return soRepo.findAll();
     }
 
@@ -67,7 +69,7 @@ public class SalesExtraController {
 
     @GetMapping("/returns")
     public List<SalesReturn> getReturns(@RequestParam(required = false) String financialYear) {
-        if (financialYear != null) return returnRepo.findByFinancialYear(financialYear);
+        if (financialYear != null && !"ALL".equalsIgnoreCase(financialYear)) return returnRepo.findByFinancialYear(financialYear);
         return returnRepo.findAll();
     }
 

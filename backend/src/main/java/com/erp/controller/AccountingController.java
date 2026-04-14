@@ -36,7 +36,7 @@ public class AccountingController {
             @RequestParam(required=false, defaultValue="false") boolean includeReversals) {
         List<AccountingVoucher> all;
         if (voucherType != null) all = voucherRepo.findByVoucherType(voucherType);
-        else if (financialYear != null) all = voucherRepo.findByFinancialYear(financialYear);
+        else if (financialYear != null && !"ALL".equalsIgnoreCase(financialYear)) all = voucherRepo.findByFinancialYear(financialYear);
         else all = voucherRepo.findAll();
 
         if (!includeReversals)

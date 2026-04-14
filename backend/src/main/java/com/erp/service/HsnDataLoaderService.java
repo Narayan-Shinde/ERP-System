@@ -27,7 +27,7 @@ public class HsnDataLoaderService {
     
     private static final String BULK_DATA_FILE = "hsn-bulk-data.json";
     
-    @PostConstruct
+    // @PostConstruct — Disabled: HsnApiService handles JSON loading
     public void init() {
         long count = hsnRepo.count();
         if (count < 500) {

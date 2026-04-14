@@ -30,7 +30,7 @@ public class ExpenseController {
             return activeOnly
                 ? expenseRepo.findByActiveTrueAndExpenseDateBetween(LocalDate.parse(fromDate), LocalDate.parse(toDate))
                 : expenseRepo.findByExpenseDateBetween(LocalDate.parse(fromDate), LocalDate.parse(toDate));
-        if (financialYear != null)
+        if (financialYear != null && !"ALL".equalsIgnoreCase(financialYear))
             return expenseRepo.findByFinancialYear(financialYear);
         return activeOnly ? expenseRepo.findByActiveTrue() : expenseRepo.findAll();
     }

@@ -1,10 +1,8 @@
-2026-04-11 11:05:25.012 [main] INFO  com.erp.ErpAccountingApplication - Starting ErpAccountingApplication using Java 17.0.12 with PID 5720 (D:\erp-project\backend\target\classes started by narayan in D:\erp-project\backend)
-2026-04-11 11:05:25.050 [main] INFO  com.erp.ErpAccountingApplication - No active profile set, falling back to 1 default profile: "default"
-2026-04-11 11:05:47.455 [main] INFO  com.erp.service.HsnApiService - HSN_SAC.json loaded: 21790 codes
-2026-04-11 11:05:50.242 [main] INFO  c.erp.service.HsnDataLoaderService - HSN database has 462 records. Loading comprehensive data...
-2026-04-11 11:05:50.243 [main] WARN  c.erp.service.HsnDataLoaderService - HSN bulk data file hsn-bulk-data.json not found.
-2026-04-11 11:05:52.500 [main] INFO  com.erp.ErpAccountingApplication - Started ErpAccountingApplication in 31.571 seconds (process running for 38.098)
-2026-04-11 11:05:57.850 [main] WARN  c.erp.config.JwtSecurityStartupCheck - Using bundled development JWT secret. Override JWT_SECRET before any production deployment.
-2026-04-11 11:11:43.886 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
-2026-04-11 11:11:44.899 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 985 ms
-2026-04-11 11:11:45.826 [http-nio-8080-exec-1] WARN  o.s.w.s.h.HandlerMappingIntrospector - Cache miss for REQUEST dispatch to '/favicon.ico' (previous null). Performing MatchableHandlerMapping lookup. This is logged once only at WARN level, and every time at TRACE.
+2026-04-14 12:58:43.843 [main] INFO  com.erp.ErpAccountingApplication - Starting ErpAccountingApplication using Java 17.0.12 with PID 2292 (D:\erp-project\backend\target\classes started by narayan in D:\erp-project\backend)
+2026-04-14 12:58:43.874 [main] INFO  com.erp.ErpAccountingApplication - No active profile set, falling back to 1 default profile: "default"
+2026-04-14 12:59:05.671 [main] INFO  com.erp.service.HsnApiService - HSN_SAC.json loaded: 21832 codes
+2026-04-14 12:59:09.891 [main] INFO  com.erp.ErpAccountingApplication - Started ErpAccountingApplication in 30.779 seconds (process running for 34.952)
+2026-04-14 12:59:14.657 [main] WARN  c.erp.config.JwtSecurityStartupCheck - Using bundled development JWT secret. Override JWT_SECRET before any production deployment.
+2026-04-14 13:09:25.822 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-04-14 13:09:30.404 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 4021 ms
+2026-04-14 13:09:32.331 [http-nio-8080-exec-2] WARN  o.s.w.s.h.HandlerMappingIntrospector - Cache miss for REQUEST dispatch to '/favicon.ico' (previous null). Performing MatchableHandlerMapping lookup. This is logged once only at WARN level, and every time at TRACE.

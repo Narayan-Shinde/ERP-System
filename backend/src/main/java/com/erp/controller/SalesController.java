@@ -247,8 +247,9 @@ public class SalesController {
                 : invoiceRepo.findByInvoiceDateBetween(LocalDate.parse(fromDate), LocalDate.parse(toDate));
         else if (customerId != null) all = invoiceRepo.findByCustomerId(customerId).stream()
             .filter(i -> !activeOnly || i.isActive()).collect(Collectors.toList());
-        else if (financialYear != null) all = invoiceRepo.findByFinancialYear(financialYear).stream()
-            .filter(i -> !activeOnly || i.isActive()).collect(Collectors.toList());
+        else if (financialYear != null && !"ALL".equalsIgnoreCase(financialYear))
+            all = invoiceRepo.findByFinancialYear(financialYear).stream()
+                .filter(i -> !activeOnly || i.isActive()).collect(Collectors.toList());
         else all = activeOnly ? invoiceRepo.findByActiveTrue() : invoiceRepo.findAll();
 
         if (paymentStatus != null)
