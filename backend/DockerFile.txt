@@ -1,0 +1,15 @@
+# Use official Java image
+FROM openjdk:17-jdk-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY . .
+
+# Build the application
+RUN apt-get update && apt-get install -y maven
+RUN mvn clean package -DskipTests
+
+# Run the jar file
+CMD ["java", "-jar", "target/*.jar"]
