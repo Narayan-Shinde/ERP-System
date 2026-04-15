@@ -22,7 +22,7 @@ export default function RecurringInvoicePage() {
   const [form,      setForm]      = useState({frequency:'MONTHLY',dayOfMonth:1,dueDays:30,invoiceType:'TAX_INVOICE',status:'ACTIVE',items:[{itemId:'',itemName:'',quantity:1,unit:'Pcs',rate:0,gstRate:18}]});
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  useEffect(()=>{ fetchAll(); },[]);
+  useEffect(()=>{ fetchAll(); },[selectedFY.label]);
 
   const fetchAll = async () => {
     try {

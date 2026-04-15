@@ -66,17 +66,19 @@ export default function SalesPage() {
     ['returns','↩️ Returns'],['register','📊 Register']
   ];
 
-  useEffect(() => { fetchAll(); fetchBanks(); }, []);
+  useEffect(() => { fetchAll(); fetchBanks(); }, [selectedFY.label]);
 
   const fetchBanks = async () => {
     try { const r = await getBanks(); setBanks(r.data||[]); } catch {}
   };
 
   const fetchAll = async () => {
+    const fyParam = selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label };
+    const fyDate  = selectedFY.value === 'ALL' ? {} : { fromDate: selectedFY.from, toDate: selectedFY.to };
     try {
       const [cR,iR,oR,rR,itR,gstR] = await Promise.all([
-        getCustomers(), getSalesInvoices(), getSalesOrders(),
-        getSalesReturns(), getItems(), getGstConfigurations()
+        getCustomers(), getSalesInvoices(fyParam), getSalesOrders(fyParam),
+        getSalesReturns(fyParam), getItems(), getGstConfigurations()
       ]);
       setCusts(cR.data||[]); setInv(iR.data||[]); setOrders(oR.data||[]);
       setReturns(rR.data||[]); setItems(itR.data||[]);

@@ -28,12 +28,13 @@ export default function ExpensePage() {
   const [filterMode, setFM]     = useState('');
   const [search, setSearch]     = useState('');
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [selectedFY.label]);
 
   const fetchAll = async () => {
+    const fyParam = selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label };
     setLoading(true);
     try {
-      const [expRes, headRes] = await Promise.all([getExpenses(), getExpenseHeads()]);
+      const [expRes, headRes] = await Promise.all([getExpenses(fyParam), getExpenseHeads()]);
       setExpenses(expRes.data || []);
       setHeads(headRes.data || []);
     } catch { setExpenses([]); setHeads([]); }

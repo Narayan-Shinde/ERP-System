@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getBanks, getSuppliers, addSupplier, updateSupplier, deleteSupplier,
          getPurchaseInvoices, addPurchaseInvoice, updatePurchaseInvoice, cancelPurchaseInvoice, recordPurchasePayment,
          getPurchaseOrders, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
-         getPurchaseReturns, addPurchaseReturn, updatePurchaseReturn,
-         getGRNs, addGRN, getPurchaseRegister, getItems,
+         getPurchaseReturns, addPurchaseReturn, updatePurchaseReturn, deletePurchaseReturn,
+         getGRNs, addGRN, updateGRN, deleteGRN, getPurchaseRegister, getItems,
          getPurchaseDebitNote, getSupplierStatement, getGstConfigurations,
          calculateInvoice } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
@@ -35,6 +35,9 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const [confirmDeleteSupp, setConfirmDeleteSupp] = useState(null);
   const [confirmCancelInv, setConfirmCancelInv] = useState(null);
   const [confirmDeletePO, setConfirmDeletePO] = useState(null);
+  const [confirmDeleteReturn, setConfirmDeleteReturn] = useState(null);
+  const [confirmDeleteGRN, setConfirmDeleteGRN] = useState(null);
+  const [editGRNId, setEditGRNId] = useState(null);
   const [confirmApproveReturn, setConfirmApproveReturn] = useState(null);
   const [tab, setTab]         = useState('invoices');
   const [suppliers, setSupp]  = useState([]);
@@ -62,17 +65,18 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const [regFrom, setRegFrom] = useState('');
   const [regTo, setRegTo]     = useState('');
 
-  useEffect(()=>{ fetchAll(); fetchBanks(); },[]);
+  useEffect(()=>{ fetchAll(); fetchBanks(); },[selectedFY.label]);
 
   const [bankList, setBankList] = useState([]);
   const fetchBanks = async () => {
     try { const r = await getBanks(); setBankList(r.data||[]); } catch { }
   };
   const fetchAll = async () => {
+    const fyParam = selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label };
     try {
       const [sR,iR,oR,rR,gR,itR,gstR] = await Promise.all([
-        getSuppliers(), getPurchaseInvoices(), getPurchaseOrders(),
-        getPurchaseReturns(), getGRNs(), getItems(), getGstConfigurations()
+        getSuppliers(), getPurchaseInvoices(fyParam), getPurchaseOrders(fyParam),
+        getPurchaseReturns(fyParam), getGRNs(fyParam), getItems(), getGstConfigurations()
       ]);
       setSupp(sR.data||[]); setInv(iR.data||[]); setOrders(oR.data||[]);
       setReturns(rR.data||[]); setGRNs(gR.data||[]); setItems(itR.data||[]);
@@ -348,6 +352,32 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     } catch { toast.error('Failed'); }
   };
 
+  // ─── DELETE PURCHASE RETURN ───
+  const deleteReturn = async () => {
+    try {
+      await deletePurchaseReturn(confirmDeleteReturn.id);
+      toast.success('Return deleted!');
+      setConfirmDeleteReturn(null);
+      fetchAll();
+    } catch(e) {
+      toast.error(e.response?.data?.error || 'Delete failed');
+      setConfirmDeleteReturn(null);
+    }
+  };
+
+  // ─── DELETE GRN ───
+  const deleteGRNEntry = async () => {
+    try {
+      await deleteGRN(confirmDeleteGRN.id);
+      toast.success('GRN deleted!');
+      setConfirmDeleteGRN(null);
+      fetchAll();
+    } catch(e) {
+      toast.error(e.response?.data?.error || 'Delete failed');
+      setConfirmDeleteGRN(null);
+    }
+  };
+
   const saveReturn = async () => {
     if(!form.supplierId){toast.error('Select supplier');return;}
     if(!form.originalInvoiceId){toast.error('Against Invoice select करणे आवश्यक आहे');return;}
@@ -399,9 +429,16 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const saveGRN = async () => {
     if(!form.supplierId){toast.error('Select supplier');return;}
     try {
-      await addGRN({...form, financialYear:selectedFY.label,
-        receivedDate:form.grnDate||today(), grnDate:form.grnDate||today(), status:'RECEIVED'});
-      toast.success('GRN created!'); setModal(null); setForm({}); fetchAll();
+      if(editGRNId) {
+        await updateGRN(editGRNId, {...form, financialYear:selectedFY.label,
+          receivedDate:form.grnDate||today(), grnDate:form.grnDate||today()});
+        toast.success('GRN updated!');
+      } else {
+        await addGRN({...form, financialYear:selectedFY.label,
+          receivedDate:form.grnDate||today(), grnDate:form.grnDate||today(), status:'RECEIVED'});
+        toast.success('GRN created!');
+      }
+      setModal(null); setForm({}); setEditGRNId(null); fetchAll();
     } catch { toast.error('Failed'); }
   };
 
@@ -677,6 +714,10 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
                               }catch{ toast.error('Failed'); }
                             }}>🏁 Complete</button>
                         )}
+                        {r.status==='PENDING' && isAdmin && (
+                          <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#dc2626',borderColor:'#fca5a5'}}
+                            onClick={()=>setConfirmDeleteReturn(r)}>🗑️</button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -692,12 +733,12 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
         <div className="card">
           <div className="card-header">
             <span className="card-title">📦 Goods Receipt Notes (GRN)</span>
-            <button className="btn btn-primary" onClick={()=>{setForm({});setModal('grn');}}>+ New GRN</button>
+            <button className="btn btn-primary" onClick={()=>{setForm({});setEditGRNId(null);setModal('grn');}}>+ New GRN</button>
           </div>
           <div className="card-body">
             {grns.length>0?(
               <div className="table-container"><table>
-                <thead><tr><th>GRN#</th><th>Supplier</th><th>GRN Date</th><th>PO Reference</th><th>Received By</th><th>Status</th></tr></thead>
+                <thead><tr><th>GRN#</th><th>Supplier</th><th>GRN Date</th><th>PO Reference</th><th>Received By</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>{grns.map(g=>(
                   <tr key={g.id}>
                     <td style={{fontSize:11,fontWeight:600}}>{g.grnNumber||'—'}</td>
@@ -706,6 +747,22 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
                     <td style={{fontSize:11}}>{g.poNumber||'—'}</td>
                     <td>{g.receivedBy||'—'}</td>
                     <td><span style={{background:'#d1fae5',color:'#16a34a',padding:'3px 8px',borderRadius:12,fontSize:11}}>{g.status||'RECEIVED'}</span></td>
+                    <td>
+                      <div style={{display:'flex',gap:4}}>
+                        <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11}}
+                          onClick={()=>{
+                            setForm({supplierId:g.supplierId,supplierName:g.supplierName,
+                              grnDate:g.grnDate,poNumber:g.poNumber,receivedBy:g.receivedBy,
+                              remarks:g.remarks,status:g.status});
+                            setEditGRNId(g.id);
+                            setModal('grn');
+                          }}>✏️</button>
+                        {isAdmin && (
+                          <button className="btn btn-outline" style={{padding:'3px 8px',fontSize:11,color:'#dc2626',borderColor:'#fca5a5'}}
+                            onClick={()=>setConfirmDeleteGRN(g)}>🗑️</button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}</tbody>
               </table></div>
@@ -1231,7 +1288,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
       {modal==='grn'&&(
         <div className="modal-overlay" onClick={()=>setModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:700,width:'95vw'}}>
-            <div className="modal-header"><h3>📦 New Goods Receipt Note</h3><button className="modal-close" onClick={()=>setModal(null)}>×</button></div>
+            <div className="modal-header"><h3>{editGRNId ? "✏️ Edit GRN" : "📦 New Goods Receipt Note"}</h3><button className="modal-close" onClick={()=>{setModal(null);setEditGRNId(null);}}>×</button></div>
             <div className="modal-body">
               <div className="form-grid">
                 <div className="form-group"><label>Supplier *</label>
@@ -1290,7 +1347,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={()=>setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveGRN}>✅ Create GRN</button>
+              <button className="btn btn-primary" onClick={saveGRN}>{editGRNId ? "💾 Update GRN" : "✅ Create GRN"}</button>
             </div>
           </div>
         </div>
@@ -1380,6 +1437,18 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
       onConfirm={deleteSupp}
       onCancel={() => setConfirmDeleteSupp(null)}
     />
+    <ConfirmModal
+      open={!!confirmDeleteReturn} title="Delete Purchase Return?" type="danger"
+      message="हा return permanently delete होईल."
+      details={confirmDeleteReturn?`${confirmDeleteReturn.returnNumber||''} — ${confirmDeleteReturn.supplierName||''}`:''}
+      confirmLabel="Yes, Delete" onConfirm={deleteReturn} onCancel={()=>setConfirmDeleteReturn(null)}/>
+
+    <ConfirmModal
+      open={!!confirmDeleteGRN} title="Delete GRN?" type="danger"
+      message="हा GRN permanently delete होईल."
+      details={confirmDeleteGRN?`${confirmDeleteGRN.grnNumber||''} — ${confirmDeleteGRN.supplierName||''}`:''}
+      confirmLabel="Yes, Delete" onConfirm={deleteGRNEntry} onCancel={()=>setConfirmDeleteGRN(null)}/>
+
     <ConfirmModal
       open={!!confirmCancelInv}
       title="Cancel Purchase Invoice?"

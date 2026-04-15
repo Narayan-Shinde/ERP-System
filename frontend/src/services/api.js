@@ -56,11 +56,14 @@ export const getPurchaseOrders      = p         => API.get('/purchase/orders', {
 export const addPurchaseOrder       = d         => API.post('/purchase/orders', d);
 export const updatePurchaseOrder    = (id,d)    => API.put(`/purchase/orders/${id}`, d);
 export const deletePurchaseOrder    = id        => API.delete(`/purchase/orders/${id}`);
-export const getPurchaseReturns     = ()        => API.get('/purchase/returns');
+export const getPurchaseReturns     = (p)       => API.get('/purchase/returns', {params:p});
 export const addPurchaseReturn      = d         => API.post('/purchase/returns', d);
 export const updatePurchaseReturn   = (id,d)    => API.put(`/purchase/returns/${id}`, d);
-export const getGRNs                = ()        => API.get('/purchase/grn');
+export const deletePurchaseReturn   = id        => API.delete(`/purchase/returns/${id}`);
+export const getGRNs                = (p)       => API.get('/purchase/grn', {params:p});
 export const addGRN                 = d         => API.post('/purchase/grn', d);
+export const updateGRN              = (id,d)    => API.put(`/purchase/grn/${id}`, d);
+export const deleteGRN              = id        => API.delete(`/purchase/grn/${id}`);
 export const getPurchaseRegister    = p         => API.get('/purchase/report/register', {params:p});
 
 export const getCustomers           = ()        => API.get('/sales/customers');
@@ -77,7 +80,7 @@ export const getSalesOrders         = p         => API.get('/sales/orders', {par
 export const addSalesOrder          = d         => API.post('/sales/orders', d);
 export const updateSalesOrder       = (id,d)    => API.put(`/sales/orders/${id}`, d);
 export const deleteSalesOrder       = id        => API.delete(`/sales/orders/${id}`);
-export const getSalesReturns        = ()        => API.get('/sales/returns');
+export const getSalesReturns        = (p)       => API.get('/sales/returns', {params:p});
 export const addSalesReturn         = d         => API.post('/sales/returns', d);
 export const updateSalesReturn      = (id,d)    => API.put(`/sales/returns/${id}`, d);
 export const deleteSalesReturn      = id        => API.delete(`/sales/returns/${id}`);
@@ -104,8 +107,10 @@ export const getLedgers             = p      => API.get('/ledger', {params:p});
 export const addLedger              = d      => API.post('/ledger', d);
 export const updateLedger           = (id,d) => API.put(`/ledger/${id}`, d);
 export const getLedgerStatement      = (id, p) => API.get(`/ledger/${id}/statement`, {params: p});
-export const getAllLedgerTransactions = p     => API.get('/ledger/transactions', {params: p});
-export const addLedgerTransaction    = d     => API.post('/ledger/transactions', d);
+export const getAllLedgerTransactions    = p     => API.get('/ledger/transactions', {params: p});
+export const addLedgerTransaction       = d     => API.post('/ledger/transactions', d);
+export const updateLedgerTransaction    = (id,d) => API.put(`/ledger/transactions/${id}`, d);
+export const deleteLedgerTransaction    = id     => API.delete(`/ledger/transactions/${id}`);
 
 export const getCategories     = ()      => API.get('/inventory/categories');
 export const addCategory       = d       => API.post('/inventory/categories', d);

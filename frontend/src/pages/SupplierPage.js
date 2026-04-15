@@ -17,7 +17,7 @@ const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chh
 
 export default function SupplierPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'ROLE_ADMIN';
+  const isAdmin = user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN';
 
   const [tab, setTab]             = useState('list');
   const [suppliers, setSuppliers] = useState([]);

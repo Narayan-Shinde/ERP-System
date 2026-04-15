@@ -1,6 +1,6 @@
 import { printReport } from '../utils/printUtils';
 import React, { useState, useEffect } from 'react';
-import { getLedgers, addLedger, updateLedger, getLedgerStatement, getAllLedgerTransactions, addLedgerTransaction } from '../services/api';
+import { getLedgers, addLedger, updateLedger, getLedgerStatement, getAllLedgerTransactions, addLedgerTransaction, updateLedgerTransaction, deleteLedgerTransaction } from '../services/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useFY } from '../context/FYContext';
@@ -25,6 +25,8 @@ export default function LedgerPage() {
   const isAdmin = currentUser?.roles?.includes('ROLE_ADMIN');
 
   const [confirmDeleteLedger, setConfirmDeleteLedger] = useState(null);
+  const [confirmDeleteTxn, setConfirmDeleteTxn] = useState(null);
+  const [editTxnId, setEditTxnId] = useState(null);
   const [tab, setTab]       = useState('accounts');
   const [ledgers, setLedgers] = useState([]);
   const [acFilter, setAcFilter] = useState('');
@@ -79,6 +81,11 @@ export default function LedgerPage() {
       const params = {};
       if (allFrom) params.fromDate = allFrom;
       if (allTo)   params.toDate   = allTo;
+      // Date range नाही तर FY filter लावतो
+      if (!allFrom && !allTo && selectedFY.value !== 'ALL') {
+        params.fromDate = selectedFY.from;
+        params.toDate   = selectedFY.to;
+      }
       const r = await getAllLedgerTransactions(params);
       const data = Array.isArray(r.data) ? r.data : [];
       setAllTxns(data);
@@ -118,23 +125,42 @@ export default function LedgerPage() {
     if (!form.amount || Number(form.amount) <= 0)  { toast.error('Amount > 0 हवा'); return; }
     if (!form.entryType)                           { toast.error('Debit/Credit select करा'); return; }
     if (!form.transactionDate)                     { toast.error('Date आवश्यक'); return; }
+    const payload = {
+      ledgerAccountId:   form.ledgerId,
+      ledgerAccountName: form.ledgerName,
+      entryType:         form.entryType,
+      amount:            Number(form.amount),
+      narration:         form.narration,
+      voucherNumber:     form.voucherNumber,
+      referenceNumber:   form.referenceNumber,
+      transactionDate:   form.transactionDate || today(),
+      financialYear:     selectedFY.label,
+    };
     try {
-      await addLedgerTransaction({
-        ledgerAccountId:   form.ledgerId,
-        ledgerAccountName: form.ledgerName,
-        entryType:         form.entryType,
-        amount:            Number(form.amount),
-        narration:         form.narration,
-        voucherNumber:     form.voucherNumber,
-        referenceNumber:   form.referenceNumber,
-        transactionDate:   form.transactionDate || today(),
-        financialYear:     selectedFY.label,
-      });
-      toast.success('Transaction saved!');
-      setModal(null); setForm({ accountGroup: 'ASSET' });
+      if (editTxnId) {
+        await updateLedgerTransaction(editTxnId, payload);
+        toast.success('Transaction updated!');
+      } else {
+        await addLedgerTransaction(payload);
+        toast.success('Transaction saved!');
+      }
+      setModal(null); setForm({ accountGroup: 'ASSET' }); setEditTxnId(null);
       if (tab === 'statement' && stmtLedgerId) fetchStatement(stmtLedgerId, stmtFrom, stmtTo);
       if (tab === 'transactions' && allLoaded)  fetchAllTxns();
     } catch { toast.error('Save failed'); }
+  };
+
+  const deleteTxn = async () => {
+    try {
+      await deleteLedgerTransaction(confirmDeleteTxn.id);
+      toast.success('Transaction deleted!');
+      setConfirmDeleteTxn(null);
+      if (tab === 'statement' && stmtLedgerId) fetchStatement(stmtLedgerId, stmtFrom, stmtTo);
+      if (allLoaded) fetchAllTxns();
+    } catch(e) {
+      toast.error(e.response?.data?.error || 'Delete failed');
+      setConfirmDeleteTxn(null);
+    }
   };
 
   const filtered = acFilter ? ledgers.filter(l => l.accountGroup === acFilter) : ledgers;
@@ -460,7 +486,7 @@ export default function LedgerPage() {
                   })}>🖨️ Print
                 </button>
               )}
-              <button className="btn btn-primary" onClick={() => { setForm({}); setModal('txn'); }}>+ Manual Entry</button>
+              <button className="btn btn-primary" onClick={() => { setForm({}); setEditTxnId(null); setModal('txn'); }}>+ Manual Entry</button>
             </div>
           </div>
           <div className="card-body">
@@ -521,7 +547,7 @@ export default function LedgerPage() {
                     <thead>
                       <tr>
                         <th>Date</th><th>Voucher#</th><th>Ledger Account</th><th>Narration</th>
-                        <th className="text-right">Debit ₹</th><th className="text-right">Credit ₹</th>
+                        <th className="text-right">Debit ₹</th><th className="text-right">Credit ₹</th><th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -539,6 +565,29 @@ export default function LedgerPage() {
                           </td>
                           <td className="text-right" style={{ color: '#16a34a', fontWeight: t.entryType === 'CREDIT' ? 700 : 400 }}>
                             {t.entryType === 'CREDIT' ? fmt(t.amount) : '—'}
+                          </td>
+                          <td>
+                            <div style={{display:'flex',gap:4}}>
+                              <button className="btn btn-outline" style={{padding:'2px 7px',fontSize:11}}
+                                onClick={()=>{
+                                  setForm({
+                                    ledgerId: t.ledgerAccountId,
+                                    ledgerName: t.ledgerAccountName,
+                                    entryType: t.entryType,
+                                    amount: t.amount,
+                                    narration: t.narration||'',
+                                    voucherNumber: t.voucherNumber||'',
+                                    referenceNumber: t.referenceNumber||'',
+                                    transactionDate: t.transactionDate,
+                                  });
+                                  setEditTxnId(t.id);
+                                  setModal('txn');
+                                }}>✏️</button>
+                              {isAdmin && (
+                                <button className="btn btn-outline" style={{padding:'2px 7px',fontSize:11,color:'#dc2626',borderColor:'#fca5a5'}}
+                                  onClick={()=>setConfirmDeleteTxn(t)}>🗑️</button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -631,7 +680,7 @@ export default function LedgerPage() {
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Manual Ledger Entry</h3>
+              <h3>{editTxnId ? "✏️ Edit Transaction" : "📝 Manual Ledger Entry"}</h3>
               <button className="modal-close" onClick={() => setModal(null)}>×</button>
             </div>
             <div className="modal-body">
@@ -685,13 +734,19 @@ export default function LedgerPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveTxn}>Save Entry</button>
+              <button className="btn btn-outline" onClick={() => { setModal(null); setEditTxnId(null); }}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveTxn}>{editTxnId ? "💾 Update" : "💾 Save Entry"}</button>
             </div>
           </div>
         </div>
       )}
     </div>
+
+    <ConfirmModal
+      open={!!confirmDeleteTxn} title="Delete Transaction?" type="danger"
+      message="हा transaction permanently delete होईल."
+      details={confirmDeleteTxn ? `${confirmDeleteTxn.voucherNumber||'Manual'} — ${confirmDeleteTxn.ledgerAccountName||''} — ${fmt(confirmDeleteTxn.amount||0)}` : ''}
+      confirmLabel="Yes, Delete" onConfirm={deleteTxn} onCancel={()=>setConfirmDeleteTxn(null)}/>
 
     <ConfirmModal
       open={!!confirmDeleteLedger}

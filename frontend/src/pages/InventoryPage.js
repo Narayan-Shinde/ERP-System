@@ -25,7 +25,7 @@ const BARCODE_TYPES = ['CODE128','EAN13','QR','CODE39','UPC'];
 
 export default function InventoryPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'ROLE_ADMIN';
+  const isAdmin = user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN';
 
   // ── Core State ──
   const [tab, setTab]           = useState('items');
@@ -580,10 +580,15 @@ export default function InventoryPage() {
                                   onClick={()=>openBatchModal(i)}>📋 Batch</button>
                               )}
                               {isAdmin && (
-                                <button className="btn btn-outline" style={{padding:'3px 7px',fontSize:10,borderColor:'#dc2626',color:'#dc2626',opacity:i.currentStock===0?1:0.5,cursor:i.currentStock===0?'pointer':'not-allowed'}}
+                                <button
+                                  className="btn btn-outline"
+                                  style={{padding:'3px 7px',fontSize:10,borderColor:'#dc2626',color:'#dc2626',
+                                    opacity: i.currentStock===0 ? 1 : 0.4,
+                                    cursor: i.currentStock===0 ? 'pointer' : 'not-allowed'}}
+                                  title={i.currentStock===0 ? 'Delete Item' : `Stock ${i.currentStock} आहे — आधी stock 0 करा मग delete होईल`}
                                   onClick={()=>{
                                     if(i.currentStock===0) setConfirmDeleteItem(i);
-                                    else toast.error('⚠️ Stock 0 nahi aahe! Item delete karaycha asel tar adhi stock 0 kara.');
+                                    else toast.error(`❌ Stock ${i.currentStock} आहे! Stock 0 केल्यावरच delete करता येईल.`);
                                   }}>🗑️</button>
                               )}
                             </div>

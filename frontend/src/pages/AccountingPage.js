@@ -39,13 +39,14 @@ export default function AccountingPage() {
   const [obLoading, setObL] = useState(false);
 
   useEffect(() => {
-    getVouchers().then(r => setVouchers(r.data || [])).catch(() => {});
+    const fyParam = selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label };
+    getVouchers(fyParam).then(r => setVouchers(r.data || [])).catch(() => {});
     getLedgers().then(r => setLedgers(r.data || [])).catch(() => {});
-    getAllLedgerTransactions({}).then(r => {
+    getAllLedgerTransactions(fyParam).then(r => {
       const nums = new Set((r.data||[]).map(t => t.voucherNumber).filter(Boolean));
       setPostedVoucherNums(nums);
     }).catch(() => {});
-  }, []);
+  }, [selectedFY.label]);
 
   const totalDebit  = entries.filter(e => e.entryType === 'DEBIT').reduce((s,e) => s + (Number(e.amount)||0), 0);
   const totalCredit = entries.filter(e => e.entryType === 'CREDIT').reduce((s,e) => s + (Number(e.amount)||0), 0);
@@ -77,7 +78,7 @@ export default function AccountingPage() {
         { ledgerId:'', ledgerName:'', entryType:'DEBIT',  amount: 0 },
         { ledgerId:'', ledgerName:'', entryType:'CREDIT', amount: 0 },
       ]);
-      getVouchers().then(r => setVouchers(r.data || []));
+      getVouchers(selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label }).then(r => setVouchers(r.data || []));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save');
     }
@@ -107,7 +108,7 @@ export default function AccountingPage() {
       await addVoucher(entry);
       toast.success('Opening balance saved!');
       setOF({ accountName:'', group:'ASSET', openingBalance:0, type:'DEBIT' });
-      getVouchers().then(r => setVouchers(r.data || []));
+      getVouchers(selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label }).then(r => setVouchers(r.data || []));
     } catch (e) { toast.error('Failed: ' + (e.response?.data?.error || e.message)); }
     setObL(false);
   };
@@ -600,7 +601,7 @@ export default function AccountingPage() {
         cancelLabel="Keep It"
         type="warning"
         onConfirm={async () => {
-          try { await deleteVoucher(confirmVoucher.id); toast.success('Voucher cancelled'); getVouchers().then(r => setVouchers(r.data||[])); }
+          try { await deleteVoucher(confirmVoucher.id); toast.success('Voucher cancelled'); getVouchers(selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label }).then(r => setVouchers(r.data||[])); }
           catch { toast.error('Failed to cancel'); }
           setConfirmVoucher(null);
         }}
