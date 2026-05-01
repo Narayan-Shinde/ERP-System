@@ -127,9 +127,7 @@ export const deleteItem        = id      => API.delete(`/inventory/items/${id}`)
 export const getLowStockItems  = ()      => API.get('/inventory/items/low-stock');
 
 // ── HSN Master API ─────────────────────────────────────────────
-export const searchHsn         = (itemName, limit = 10) => API.get('/hsn/search', { params: { itemName, limit } });
-export const suggestHsn        = itemName => API.get('/hsn/search', { params: { itemName, limit: 5 } });
-export const autoCompleteHsn   = (code, limit = 10) => API.get('/hsn/autocomplete', { params: { code, limit } });
+// HSN search removed — HSN code manually entered by user
 export const getHsnByCode      = code    => API.get(`/hsn/${code}`);
 export const validateHsn       = code    => API.get(`/hsn/validate/${code}`);
 export const getHsnGstRate     = code    => API.get(`/hsn/gst-rate/${code}`);

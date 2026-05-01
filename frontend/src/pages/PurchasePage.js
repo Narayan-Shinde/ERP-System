@@ -4,7 +4,6 @@ import { getBanks, getSuppliers, addSupplier, updateSupplier, deleteSupplier,
          getPurchaseOrders, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
          getPurchaseReturns, addPurchaseReturn, updatePurchaseReturn, deletePurchaseReturn,
          getGRNs, addGRN, updateGRN, deleteGRN, getPurchaseRegister, getItems,
-         getPurchaseDebitNote, getSupplierStatement, getGstConfigurations,
          calculateInvoice } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
@@ -23,9 +22,10 @@ const [ewayPModal, setEwayPModal] = useState(false);
 const [ewayPNum, setEwayPNum] = useState("");
 
 const [debitNoteData, setDebitNoteData] = useState(null);
-
-const [supplierStmt, setSupplierStmt] = useState([]);
-const [stmtSupplier, setStmtSupplier] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [supplierStmt, setSupplierStmt] = useState([]);
+  // eslint-disable-next-line no-unused-vars
+  const [stmtSupplier, setStmtSupplier] = useState(null);
 const fmt  = n => '₹' + (Number(n)||0).toLocaleString('en-IN',{maximumFractionDigits:2});
 const today = () => new Date().toISOString().split('T')[0];
 const GST_RATES = [0,0.25,1,3,5,12,18,28];
@@ -49,7 +49,6 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const [grns, setGRNs]       = useState([]);
   const [register, setReg]    = useState(null);
   const [items, setItems]     = useState([]);
-  const [gstConfigs, setGstConfigs] = useState([]);
   const [modal, setModal]     = useState(null);
   const [form, setForm]       = useState({});
   const [poItems, setPoItems] = useState([{itemId:'',itemName:'',quantity:1,unit:'Nos',rate:0,amount:0}]);
@@ -65,7 +64,7 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const [regFrom, setRegFrom] = useState('');
   const [regTo, setRegTo]     = useState('');
 
-  useEffect(()=>{ fetchAll(); fetchBanks(); },[selectedFY.label]);
+  useEffect(()=>{ fetchAll(); fetchBanks(); },[selectedFY.label]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [bankList, setBankList] = useState([]);
   const fetchBanks = async () => {
@@ -74,17 +73,16 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
   const fetchAll = async () => {
     const fyParam = selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label };
     try {
-      const [sR,iR,oR,rR,gR,itR,gstR] = await Promise.all([
+      const [sR,iR,oR,rR,gR,itR] = await Promise.all([
         getSuppliers(), getPurchaseInvoices(fyParam), getPurchaseOrders(fyParam),
-        getPurchaseReturns(fyParam), getGRNs(fyParam), getItems(), getGstConfigurations()
+        getPurchaseReturns(fyParam), getGRNs(fyParam), getItems()
       ]);
       setSupp(sR.data||[]); setInv(iR.data||[]); setOrders(oR.data||[]);
       setReturns(rR.data||[]); setGRNs(gR.data||[]); setItems(itR.data||[]);
-      setGstConfigs(gstR.data||[]);
     } catch { }
   };
 
-  const gstRateOptions = useMemo(() => {
+  const gstRateOptions = useMemo(() => { // eslint-disable-line react-hooks/exhaustive-deps
     return Array.from(new Set(GST_RATES)).sort((a, b) => a - b);
   }, []);
 
@@ -121,7 +119,21 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
         };
         
         const response = await calculateInvoice(invoice, form.isInterState);
-        setCalculatedTotals(response.data);
+        const d = response.data;
+        // Normalize backend field names (totalCGST → totalCgst, etc.)
+        setCalculatedTotals({
+          subTotal:        d.totalTaxable   ?? d.subTotal       ?? 0,
+          totalCgst:       d.totalCGST      ?? d.totalCgst      ?? 0,
+          totalSgst:       d.totalSGST      ?? d.totalSgst      ?? 0,
+          totalIgst:       d.totalIGST      ?? d.totalIgst      ?? 0,
+          totalGst:       (d.totalCGST ?? d.totalCgst ?? 0) + (d.totalSGST ?? d.totalSgst ?? 0) + (d.totalIGST ?? d.totalIgst ?? 0),
+          discountAmount:  d.totalDiscount  ?? d.discountAmount  ?? 0,
+          grandTotal:      d.grandTotal     ?? 0,
+          freightCharge:   form.freightCharge  || 0,
+          packagingCharge: form.packagingCharge|| 0,
+          otherCharge:     form.otherCharge    || 0,
+          roundOff:        form.roundOff       || 0,
+        });
       } catch (err) {
         // Silent fail - will use fallback calculation
       }
@@ -291,7 +303,9 @@ const GST_RATES = [0,0.25,1,3,5,12,18,28];
     catch(e) { toast.error('Draft save failed'); }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const openPEwayModal = (inv) => { setEwayPModal(inv); setEwayPNum(inv.ewayBillNumber||''); };
+  // eslint-disable-next-line no-unused-vars
   const savePEwayBill  = async () => {
     if(!ewayPNum.trim()){toast.error('E-Way Bill number enter kara');return;}
     try {

@@ -65,7 +65,7 @@ export default function Login() {
         <div style={{ marginTop: 'auto', paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.15)' }}>
           <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.8 }}>
             <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 4 }}>Prem Software India Solution</div>
-            <div>Customized for: Sunita Enterprise</div>
+            <div>Customized for: Rangai Paints and Hardware</div>
             <div>Developed by: Narayan Shinde</div>
             <div>
               <a
@@ -92,7 +92,7 @@ export default function Login() {
               🔐
             </div>
             <h2 style={{ margin: '0 0 4px', color: '#1a2744', fontSize: 22, fontWeight: 800 }}>
-              Welcome to Sunita Enterprise
+              Welcome to Rangai Paints and Hardware
             </h2>
             <p style={{ margin: 0, color: '#94a3b8', fontSize: 13 }}>Sign in to your ERP account</p>
           </div>

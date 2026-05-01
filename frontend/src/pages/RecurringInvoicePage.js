@@ -5,6 +5,7 @@ import {
   calculateInvoice
 } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
+import { useFY } from '../context/FYContext';
 import toast from 'react-hot-toast';
 
 const fmt  = n => '₹' + (Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -21,8 +22,9 @@ export default function RecurringInvoicePage() {
   const [calculatedTotal, setCalculatedTotal] = useState(null);
   const [form,      setForm]      = useState({frequency:'MONTHLY',dayOfMonth:1,dueDays:30,invoiceType:'TAX_INVOICE',status:'ACTIVE',items:[{itemId:'',itemName:'',quantity:1,unit:'Pcs',rate:0,gstRate:18}]});
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const { selectedFY } = useFY();
 
-  useEffect(()=>{ fetchAll(); },[selectedFY.label]);
+  useEffect(()=>{ fetchAll(); },[]);
 
   const fetchAll = async () => {
     try {

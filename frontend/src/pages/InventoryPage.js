@@ -8,11 +8,9 @@ import {
   getItemBatches, addItemBatch,
   getItemPriceLists, updateItemPriceLists,
   updateItemImage, deleteItemImage,
-  getExpiringSoon, adjustItemStock,
-  suggestHsn
+  getExpiringSoon, adjustItemStock
 } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
-import HsnAutoComplete from '../components/HsnAutoComplete';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -48,7 +46,6 @@ export default function InventoryPage() {
   const [showModal, setShowModal]   = useState(null);
   const [form, setForm]             = useState({unit:'Nos',gstRate:18,reorderLevel:10});
   const [activeFormTab, setActiveFormTab] = useState('basic');
-  const [autoFilledHsn, setAutoFilledHsn] = useState(null); // HSN auto-filled from item name
 
   // ── Confirm Modals ──
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
@@ -108,44 +105,9 @@ export default function InventoryPage() {
     loadExpiring();
   }, []);
 
-  // ─────────────── HSN AUTO-SUGGEST FROM BACKEND (HSN_SAC.json) ───────────────
-  const hsnTimeoutRef = useRef(null);
+  // HSN autofill removed — user manually types HSN code
   const handleItemNameChange = (e) => {
-    const name = e.target.value;
-    setForm(f => ({...f, itemName: name}));
-
-    if (!name.trim()) {
-      setAutoFilledHsn(null);
-      return;
-    }
-
-    if (hsnTimeoutRef.current) clearTimeout(hsnTimeoutRef.current);
-
-    if (name.trim().length >= 2) {
-      hsnTimeoutRef.current = setTimeout(async () => {
-        try {
-          const response = await suggestHsn(name);
-          // API returns array of suggestions
-          const list = Array.isArray(response.data) ? response.data : [];
-          if (list.length > 0) {
-            const best = list[0];
-            setForm(f => ({
-              ...f,
-              hsnCode: best.hsnCode,
-              gstRate: best.gstRate,
-              hsnDescription: best.description
-            }));
-            setAutoFilledHsn({
-              hsnCode: best.hsnCode,
-              gstRate: best.gstRate,
-              description: best.description || ''
-            });
-          }
-        } catch (err) {
-          // silent fail
-        }
-      }, 300);
-    }
+    setForm(f => ({...f, itemName: e.target.value}));
   };
 
   // ─────────────── ITEMS CRUD ───────────────
@@ -469,7 +431,6 @@ export default function InventoryPage() {
               <button className="btn btn-primary" onClick={()=>{
                 setForm({unit:'Nos',gstRate:18,reorderLevel:10});
                 setActiveFormTab('basic');
-                setAutoFilledHsn(null);
                 setShowModal('item');
               }}>+ Add Item</button>
             </div>
@@ -567,8 +528,6 @@ export default function InventoryPage() {
                                 onClick={()=>{
                                   setForm({...i,openingStock:i.currentStock,_imagePreview:i.imageBase64?`data:${i.imageMimeType||'image/jpeg'};base64,${i.imageBase64}`:null});
                                   setActiveFormTab('basic');
-                                  // Show existing HSN in HsnAutoComplete
-                                  setAutoFilledHsn(i.hsnCode ? {hsnCode: i.hsnCode, gstRate: i.gstRate||0, description: ''} : null);
                                   setShowModal('item');
                                 }}>✏️ Edit</button>
                               <button className="btn btn-outline" style={{padding:'3px 7px',fontSize:10,borderColor:'#7c3aed',color:'#7c3aed'}}
@@ -824,18 +783,13 @@ export default function InventoryPage() {
                     placeholder="Enter item name"/>
                 </div>
                 <div className="form-group">
-                  <label>HSN Code <span style={{fontSize:10,color:'#94a3b8'}}>(8-digit auto-suggest)</span></label>
-                  <HsnAutoComplete
-                    value={form.hsnCode}
-                    onChange={(hsnCode) => setForm({...form, hsnCode})}
-                    onGstRateChange={(gstRate) => setForm({...form, gstRate})}
-                    placeholder="Type item name to search HSN..."
-                    showGstRate={true}
-                    autoFilledHsn={autoFilledHsn}
+                  <label>HSN / SAC Code</label>
+                  <input
+                    value={form.hsnCode||''}
+                    onChange={e => setForm({...form, hsnCode: e.target.value})}
+                    placeholder="Enter 8-digit HSN / SAC code"
+                    maxLength={8}
                   />
-                  <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
-                    💡 Item name type करा - exact 8-digit HSN code auto-fill होईल
-                  </div>
                 </div>
                 <div className="form-group">
                   <label>Category</label>

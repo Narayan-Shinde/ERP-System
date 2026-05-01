@@ -61,6 +61,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/bank-statements/**").hasAnyRole("ADMIN","ACCOUNTANT","MANAGER")
                 .requestMatchers("/api/gst/gstr1/export-json").hasAnyRole("ADMIN","ACCOUNTANT","MANAGER")
                 .requestMatchers("/api/settings/**").hasAnyRole("ADMIN","ACCOUNTANT")
+                // Public access for React frontend static resources
+                .requestMatchers("/", "/index.html", "/static/**", "/*.js", "/*.css", "/*.ico", "/*.png", "/*.json").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

@@ -1,0 +1,22 @@
+2026-04-24 20:01:58.697 [main] INFO  com.erp.ErpAccountingApplication - Starting ErpAccountingApplication using Java 17.0.12 with PID 2348 (E:\erp-project\backend\target\classes started by narayan in E:\erp-project\backend)
+2026-04-24 20:01:58.828 [main] INFO  com.erp.ErpAccountingApplication - No active profile set, falling back to 1 default profile: "default"
+2026-04-24 20:02:12.405 [main] ERROR o.s.b.w.e.tomcat.TomcatStarter - Error starting Tomcat context. Exception: org.springframework.beans.factory.UnsatisfiedDependencyException. Message: Error creating bean with name 'jwtFilter': Unsatisfied dependency expressed through field 'userDetailsService': Error creating bean with name 'userDetailsServiceImpl': Unsatisfied dependency expressed through field 'userRepository': No qualifying bean of type 'com.erp.repository.UserRepository' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
+2026-04-24 20:02:12.727 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Unable to start web server
+2026-04-24 20:02:12.898 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Field userRepository in com.erp.service.UserDetailsServiceImpl required a bean of type 'com.erp.repository.UserRepository' that could not be found.
+
+The injection point has the following annotations:
+	- @org.springframework.beans.factory.annotation.Autowired(required=true)
+
+
+Action:
+
+Consider defining a bean of type 'com.erp.repository.UserRepository' in your configuration.
+

@@ -166,7 +166,7 @@ export default function Layout() {
 
         <footer className="app-footer">
           <div className="footer-left">
-            © 2026 &nbsp;<strong>ERP Accounting &amp; GST Management System</strong> &nbsp;|&nbsp; <strong>Sunita Enterprise</strong>
+            © 2026 &nbsp;<strong>ERP Accounting &amp; GST Management System</strong> &nbsp;|&nbsp; <strong>Rangai Paints and Hardware</strong>
           </div>
           <div className="footer-center">
             A Product of <strong>Prem Software India Solution</strong>

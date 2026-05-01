@@ -4,12 +4,11 @@ import {
   getSalesInvoices, addSalesInvoice, updateSalesInvoice, cancelSalesInvoice, recordSalesPayment,
   getSalesOrders, addSalesOrder, updateSalesOrder, deleteSalesOrder,
   getSalesReturns, addSalesReturn, updateSalesReturn, deleteSalesReturn,
-  getItems, getSalesRegister, convertToInvoice, getGstConfigurations,
-  suggestHsn, calculateInvoice
+  getItems, getSalesRegister, convertToInvoice,
+  calculateInvoice
 } from '../services/api';
 import { printSalesInvoiceMulti } from '../utils/printUtils';
 import ConfirmModal from '../components/ConfirmModal';
-import HsnAutoComplete from '../components/HsnAutoComplete';
 import toast from 'react-hot-toast';
 import { useFY } from '../context/FYContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +17,6 @@ const fmt   = n => '₹' + (Number(n)||0).toLocaleString('en-IN',{maximumFractio
 const today = () => new Date().toISOString().split('T')[0];
 const GST_RATES = [0,0.25,1,3,5,12,18,28];
 const STATUS_COLOR = {PAID:'#16a34a',PARTIAL:'#d97706',PENDING:'#dc2626',RETURNED:'#7c3aed',CONFIRMED:'#2563eb',DRAFT:'#64748b',CANCELLED:'#94a3b8'};
-const STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Jammu & Kashmir','Ladakh','Puducherry'];
 
 export default function SalesPage() {
   const { selectedFY } = useFY();
@@ -31,7 +29,6 @@ export default function SalesPage() {
   const [orders,    setOrders]    = useState([]);
   const [returns,   setReturns]   = useState([]);
   const [items,     setItems]     = useState([]);
-  const [gstConfigs, setGstConfigs] = useState([]);
   const [banks,     setBanks]     = useState([]);
   const [register,  setReg]       = useState(null);
 
@@ -66,7 +63,7 @@ export default function SalesPage() {
     ['returns','↩️ Returns'],['register','📊 Register']
   ];
 
-  useEffect(() => { fetchAll(); fetchBanks(); }, [selectedFY.label]);
+  useEffect(() => { fetchAll(); fetchBanks(); }, [selectedFY.label]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchBanks = async () => {
     try { const r = await getBanks(); setBanks(r.data||[]); } catch {}
@@ -74,15 +71,13 @@ export default function SalesPage() {
 
   const fetchAll = async () => {
     const fyParam = selectedFY.value === 'ALL' ? {} : { financialYear: selectedFY.label };
-    const fyDate  = selectedFY.value === 'ALL' ? {} : { fromDate: selectedFY.from, toDate: selectedFY.to };
     try {
-      const [cR,iR,oR,rR,itR,gstR] = await Promise.all([
+      const [cR,iR,oR,rR,itR] = await Promise.all([
         getCustomers(), getSalesInvoices(fyParam), getSalesOrders(fyParam),
-        getSalesReturns(fyParam), getItems(), getGstConfigurations()
+        getSalesReturns(fyParam), getItems()
       ]);
       setCusts(cR.data||[]); setInv(iR.data||[]); setOrders(oR.data||[]);
       setReturns(rR.data||[]); setItems(itR.data||[]);
-      setGstConfigs(gstR.data||[]);
     } catch { toast.error('Data load failed — backend running aahe ka?'); }
   };
 
@@ -191,7 +186,21 @@ export default function SalesPage() {
         };
         
         const response = await calculateInvoice(invoice, form.isInterState);
-        setCalculatedTotals(response.data);
+        const d = response.data;
+        // Normalize backend field names (totalCGST → totalCgst, etc.)
+        setCalculatedTotals({
+          subTotal:        d.totalTaxable   ?? d.subTotal       ?? 0,
+          totalCgst:       d.totalCGST      ?? d.totalCgst      ?? 0,
+          totalSgst:       d.totalSGST      ?? d.totalSgst      ?? 0,
+          totalIgst:       d.totalIGST      ?? d.totalIgst      ?? 0,
+          totalGst:       (d.totalCGST ?? d.totalCgst ?? 0) + (d.totalSGST ?? d.totalSgst ?? 0) + (d.totalIGST ?? d.totalIgst ?? 0),
+          discountAmount:  d.totalDiscount  ?? d.discountAmount  ?? 0,
+          grandTotal:      d.grandTotal     ?? 0,
+          freightCharge:   form.freightCharge  || 0,
+          packagingCharge: form.packagingCharge|| 0,
+          otherCharge:     form.otherCharge    || 0,
+          roundOff:        form.roundOff       || 0,
+        });
       } catch (err) {
         // Silent fail - will use fallback calculation
       }
@@ -768,61 +777,106 @@ export default function SalesPage() {
 
               {/* Items */}
               <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden',marginBottom:12}}>
-                <div style={{background:'#1a4f8a',color:'white',padding:'8px 12px',fontSize:12,display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr .6fr 1fr .5fr',gap:8,fontWeight:700}}>
-                  <span>Item Name</span><span>HSN / SAC</span><span>Qty</span><span>Unit</span><span>Rate</span><span>Disc%</span><span>GST%</span><span></span>
-                </div>
                 <div style={{fontSize:11,color:'#64748b',padding:'6px 10px',background:'#f1f5f9',borderBottom:'1px solid #e2e8f0'}}>
-                  💡 Inventory item select करा किंवा "Custom" checkbox वर click करून नवीन item टाईप करा. HSN field मध्ये item name टाईप केल्यास exact 8-digit HSN code auto-suggest होईल!
+                  💡 Inventory item select करा किंवा "Custom" checkbox वर click करून नवीन item टाईप करा.
                 </div>
-                {invItems.map((it,i)=>(
-                  <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr .8fr .8fr 1fr .6fr 1fr .5fr',gap:8,padding:'6px 8px',borderBottom:'1px solid #f1f5f9',background:i%2?'#f8fafc':'white'}}>
-                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                      <div style={{display:'flex',alignItems:'center',gap:4}}>
-                        <input
-                          type="checkbox"
-                          checked={it.isCustom}
-                          onChange={e=>updateItemRow(i,'isCustom',e.target.checked)}
-                          title="Custom item (not in inventory)"
-                          style={{cursor:'pointer'}}
-                        />
-                        <span style={{fontSize:10,color:'#64748b'}}>Custom</span>
-                      </div>
-                      {it.isCustom ? (
-                        <input
-                          value={it.itemName}
-                          onChange={e=>updateItemRow(i,'itemName',e.target.value)}
-                          placeholder="Type item name..."
-                          style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}
-                        />
-                      ) : (
-                        <select value={it.itemId||''} onChange={e=>updateItemRow(i,'itemId',e.target.value)}
-                          style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}>
-                          <option value="">-- Select Item --</option>
-                          {items.filter(x=>x.active!==false).map(x=>(
-                            <option key={x.id} value={x.id}>{x.itemName}{x.itemCode?' ('+x.itemCode+')':''} | Stock:{x.currentStock}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                    <HsnAutoComplete
-                      value={it.hsnCode}
-                      onChange={(hsnCode) => updateItemRow(i,'hsnCode',hsnCode)}
-                      onGstRateChange={(gstRate) => updateItemRow(i,'gstRate',gstRate)}
-                      placeholder="HSN..."
-                      showGstRate={true}
-                    />
-                    <input type="number" min="0.001" value={it.quantity} onChange={e=>updateItemRow(i,'quantity',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
-                    <input value={it.unit||'Nos'} onChange={e=>updateItemRow(i,'unit',e.target.value)} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
-                    <input type="number" min="0" value={it.rate} onChange={e=>updateItemRow(i,'rate',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
-                    <input type="number" min="0" max="100" value={it.discount||0} onChange={e=>updateItemRow(i,'discount',Number(e.target.value))} style={{fontSize:12,padding:'4px 6px',border:'1px solid #e2e8f0',borderRadius:4}}/>
-                    <select value={it.gstRate} onChange={e=>updateItemRow(i,'gstRate',Number(e.target.value))} style={{fontSize:12,padding:'4px 2px',border:'1px solid #e2e8f0',borderRadius:4}}>
-                      {gstRateOptions.map(r=><option key={r} value={r}>{r}%</option>)}
-                    </select>
-                    <button onClick={()=>removeItemRow(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16}}>×</button>
-                  </div>
-                ))}
-                <div style={{padding:'8px',background:'#f8fafc'}}>
-                  <button className="btn btn-outline" style={{fontSize:12}} onClick={addItemRow}>+ Add Item</button>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                    <thead>
+                      <tr style={{background:'#1a4f8a',color:'white'}}>
+                        <th style={{padding:'8px 6px',textAlign:'left',minWidth:180}}>Item Name</th>
+                        <th style={{padding:'8px 6px',textAlign:'left',minWidth:110}}>HSN / SAC</th>
+                        <th style={{padding:'8px 6px',textAlign:'center',width:70}}>Qty</th>
+                        <th style={{padding:'8px 6px',textAlign:'center',width:60}}>Unit</th>
+                        <th style={{padding:'8px 6px',textAlign:'right',width:90}}>Rate (₹)</th>
+                        <th style={{padding:'8px 6px',textAlign:'center',width:60}}>Disc%</th>
+                        <th style={{padding:'8px 6px',textAlign:'center',width:70}}>GST%</th>
+                        <th style={{padding:'8px 6px',textAlign:'right',width:90}}>Taxable</th>
+                        <th style={{padding:'8px 6px',textAlign:'right',width:90}}>
+                          {form.isInterState ? 'IGST' : 'CGST+SGST'}
+                        </th>
+                        <th style={{padding:'8px 6px',textAlign:'right',width:90}}>Total</th>
+                        <th style={{padding:'8px 6px',width:30}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invItems.map((it,i)=>{
+                        const taxable = (it.quantity||0)*(it.rate||0)*(1-(it.discount||0)/100);
+                        const gstAmt  = taxable*(it.gstRate||0)/100;
+                        const total   = taxable+gstAmt;
+                        return (
+                          <tr key={i} style={{borderBottom:'1px solid #f1f5f9',background:i%2?'#f8fafc':'white'}}>
+                            <td style={{padding:'4px 6px'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
+                                <input type="checkbox" checked={it.isCustom} onChange={e=>updateItemRow(i,'isCustom',e.target.checked)} title="Custom item" style={{cursor:'pointer'}}/>
+                                <span style={{fontSize:10,color:'#64748b'}}>Custom</span>
+                              </div>
+                              {it.isCustom ? (
+                                <input value={it.itemName} onChange={e=>updateItemRow(i,'itemName',e.target.value)} placeholder="Type item name..." style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}/>
+                              ) : (
+                                <select value={it.itemId||''} onChange={e=>updateItemRow(i,'itemId',e.target.value)} style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}>
+                                  <option value="">-- Select Item --</option>
+                                  {items.filter(x=>x.active!==false).map(x=>(
+                                    <option key={x.id} value={x.id}>{x.itemName}{x.itemCode?' ('+x.itemCode+')':''} | Stock:{x.currentStock}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <input
+                                type="text"
+                                value={it.hsnCode||''}
+                                onChange={e=>updateItemRow(i,'hsnCode',e.target.value)}
+                                placeholder="HSN..."
+                                maxLength={8}
+                                style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}
+                              />
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <input type="number" min="0.001" value={it.quantity} onChange={e=>updateItemRow(i,'quantity',Number(e.target.value))} style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%',textAlign:'center'}}/>
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <input value={it.unit||'Nos'} onChange={e=>updateItemRow(i,'unit',e.target.value)} style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%',textAlign:'center'}}/>
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <input type="number" min="0" value={it.rate} onChange={e=>updateItemRow(i,'rate',Number(e.target.value))} style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%',textAlign:'right'}}/>
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <input type="number" min="0" max="100" value={it.discount||0} onChange={e=>updateItemRow(i,'discount',Number(e.target.value))} style={{fontSize:12,padding:'3px 5px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%',textAlign:'center'}}/>
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <select value={it.gstRate} onChange={e=>updateItemRow(i,'gstRate',Number(e.target.value))} style={{fontSize:12,padding:'3px 2px',border:'1px solid #e2e8f0',borderRadius:4,width:'100%'}}>
+                                {gstRateOptions.map(r=><option key={r} value={r}>{r}%</option>)}
+                              </select>
+                            </td>
+                            <td style={{padding:'4px 6px',textAlign:'right',color:'#374151'}}>{fmt(taxable)}</td>
+                            <td style={{padding:'4px 6px',textAlign:'right',color:'#6366f1'}}>{fmt(gstAmt)}</td>
+                            <td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,color:'#1a4f8a'}}>{fmt(total)}</td>
+                            <td style={{padding:'4px 6px',textAlign:'center'}}>
+                              <button onClick={()=>removeItemRow(i)} style={{background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{background:'#f8fafc'}}>
+                        <td colSpan={7} style={{padding:'8px 6px'}}>
+                          <button className="btn btn-outline" style={{fontSize:12}} onClick={addItemRow}>+ Add Item</button>
+                        </td>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontSize:12,color:'#374151'}}>
+                          <div>{fmt(invItems.reduce((s,it)=>(s+(it.quantity||0)*(it.rate||0)*(1-(it.discount||0)/100)),0))}</div>
+                        </td>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontSize:12,color:'#6366f1'}}>
+                          <div>{fmt(invItems.reduce((s,it)=>{const t=(it.quantity||0)*(it.rate||0)*(1-(it.discount||0)/100);return s+t*(it.gstRate||0)/100;},0))}</div>
+                        </td>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontSize:12,fontWeight:700,color:'#1a4f8a'}}>
+                          <div>{fmt(invItems.reduce((s,it)=>{const t=(it.quantity||0)*(it.rate||0)*(1-(it.discount||0)/100);return s+t*(1+(it.gstRate||0)/100);},0))}</div>
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               </div>
 
